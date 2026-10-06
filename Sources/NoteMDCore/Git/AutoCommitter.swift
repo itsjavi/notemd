@@ -64,8 +64,9 @@ public final class AutoCommitter: @unchecked Sendable {
 
     /// Commits now, cancelling any pending timer, and returns once that commit finished.
     /// Always safe to call; it queues behind a commit already in progress.
-    public func flush() async {
-        let commit = queue.sync { enqueueCommit() }
+    /// `message` overrides the generated commit message (e.g. restores).
+    public func flush(message: String? = nil) async {
+        let commit = queue.sync { enqueueCommit(message: message) }
         await commit.value
     }
 
@@ -98,13 +99,13 @@ public final class AutoCommitter: @unchecked Sendable {
 
     /// Clears the pending state and chains a commit after the previous one, so commits never overlap.
     /// Saves marked dirty from here on schedule a new commit.
-    private func enqueueCommit() -> Task<Void, Never> {
+    private func enqueueCommit(message: String? = nil) -> Task<Void, Never> {
         resetPending()
         let previous = lastCommit
         let commit = Task(priority: .utility) { [git, onEvent] in
             await previous?.value
             do {
-                if let commit = try await git.commitAll() {
+                if let commit = try await git.commitAll(message: message) {
                     onEvent(.committed(commit))
                 } else {
                     onEvent(.nothingToCommit)

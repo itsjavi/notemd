@@ -104,3 +104,69 @@ import Testing
         #expect(Tag.normalizedList(["#a", " A ", "b  c", ""]) == ["a", "b c"])
     }
 }
+
+@Suite struct RoundTripAndFileTests {
+    @Test func unchangedFrontMatterRoundTripsExactly() {
+        for source in ["---\r\ntitle: A\r\n---\r\nBody\r\n", "---\ntitle: A\n...\nBody", "---\n---\nBody", "---\ntitle: A\n---  \nBody", "\u{FEFF}---\na: 1\n---\nx", "\u{FEFF}# Plain"] {
+            #expect(MarkdownText(source).text == source)
+        }
+    }
+
+    @Test func editedFrontMatterKeepsDelimiterStyle() {
+        var text = MarkdownText("---\r\ntitle: A\r\n...\r\nBody")
+        text.frontMatter?.setTags(["x"])
+        #expect(text.text.hasPrefix("---\r\ntitle: A\r\n"))
+        #expect(text.text.hasSuffix("...\r\nBody"))
+        #expect(!text.text.replacingOccurrences(of: "\r\n", with: "").contains("\n"))
+    }
+
+    @Test func aliasKeysAreReplaced() {
+        var frontMatter = FrontMatter(yaml: "tag: [old]\nparameters:\n  - name: a\n")
+        frontMatter.setTags([])
+        frontMatter.setParameters([])
+        #expect(frontMatter.tags.isEmpty)
+        #expect(frontMatter.parameters.isEmpty)
+        #expect(frontMatter.yaml.isEmpty)
+    }
+
+    @Test func datesAreNotShifted() {
+        let frontMatter = FrontMatter(yaml: "title: 2024-03-15\nparams:\n  - {name: d, type: date, default: 2024-03-15}\n")
+        #expect(frontMatter.title == "2024-03-15")
+        guard case .date(let date) = frontMatter.parameters.first?.defaultValue else {
+            Issue.record("expected a date default")
+            return
+        }
+        #expect(ISO8601DateFormatter.dateOnly.string(from: date) == "2024-03-15")
+    }
+
+    @Test func crlfTitlesAndTemplates() {
+        #expect(NoteTitle.firstHeading(in: "# Title\r\n\r\nBody") == "Title")
+        let renderer = TemplateRenderer(values: ["a": .bool(true)])
+        #expect(renderer.render("x\r\n{{#if a}}\r\ny\r\n{{/if}}\r\nz") == "x\r\ny\r\nz")
+    }
+
+    @Test func safeWriterKeepsCreationDate() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("notemd-write-\(UUID().uuidString).md")
+        try Data("one".utf8).write(to: url)
+        defer { try? FileManager.default.removeItem(at: url) }
+        try FileManager.default.setAttributes([.creationDate: Date(timeIntervalSince1970: 1_000_000)], ofItemAtPath: url.path)
+        try SafeFileWriter.write(Data("two".utf8), to: url)
+        let values = try url.resourceValues(forKeys: [.creationDateKey])
+        #expect(values.creationDate == Date(timeIntervalSince1970: 1_000_000))
+        #expect(try String(contentsOf: url, encoding: .utf8) == "two")
+    }
+
+    @Test func safeRelativePaths() {
+        #expect(SafeFileWriter.isSafeRelativePath("Work/Plan.md"))
+        #expect(SafeFileWriter.isSafeRelativePath(""))
+        #expect(!SafeFileWriter.isSafeRelativePath("../x"))
+        #expect(!SafeFileWriter.isSafeRelativePath("a/../../b"))
+        #expect(!SafeFileWriter.isSafeRelativePath("/etc"))
+        #expect(!SafeFileWriter.isSafeRelativePath(".git/config"))
+    }
+
+    @Test func canonicalKeepsPrivatePrefix() {
+        #expect(URL(fileURLWithPath: "/tmp").canonical.path == "/private/tmp")
+        #expect(URL(fileURLWithPath: "/tmp/notemd-missing-\(UUID().uuidString)").canonical.path.hasPrefix("/private/tmp/"))
+    }
+}

@@ -2,11 +2,12 @@ import Foundation
 
 /// The HTML shell and GitHub-like stylesheet used by the preview.
 enum PreviewPage {
-    static func html(body: String) -> String {
-        """
+    static func html(body: String, allowRemoteImages: Bool) -> String {
+        let remote = allowRemoteImages ? " https: http:" : ""
+        return """
         <!doctype html>
         <html><head><meta charset="utf-8">
-        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src notemd-file: https: http: data:; media-src notemd-file: https:; style-src 'unsafe-inline'; font-src notemd-file: data:;">
+        <meta http-equiv="Content-Security-Policy" content="default-src 'none'; img-src notemd-file: data:\(remote); media-src notemd-file:\(remote); style-src 'unsafe-inline'; font-src notemd-file: data:;">
         <meta name="color-scheme" content="light dark">
         <style>\(css)</style>
         </head><body><article id="content" class="markdown-body">\(body)</article></body></html>

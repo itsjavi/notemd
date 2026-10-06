@@ -13,6 +13,7 @@ struct VersionHistoryView: View {
     @State private var selection: String?
     @State private var mode = Mode.changes
     @State private var contents: [String: String] = [:]
+    @State private var failedVersions: Set<String> = []
     @State private var isRestoring = false
 
     private static let currentID = "current"
@@ -159,6 +160,8 @@ struct VersionHistoryView: View {
         if let selection {
             if selection == Self.currentID {
                 MarkdownPreview(markdown: currentText, baseDirectory: noteDirectory, accessRoot: store.rootURL)
+            } else if failedVersions.contains(selection) {
+                ContentUnavailableView("Version Unavailable", systemImage: "exclamationmark.triangle", description: Text("This version couldn't be read from the history."))
             } else if let version = contents[selection] {
                 switch mode {
                 case .preview:
@@ -242,10 +245,19 @@ struct VersionHistoryView: View {
         guard let id, id != Self.currentID, let git = store.git, let index = commits.firstIndex(where: { $0.id == id }) else { return }
         var needed = [commits[index]]
         if index + 1 < commits.count { needed.append(commits[index + 1]) }
-        for commit in needed where contents[commit.id] == nil {
-            let filePath = commit.path ?? path
-            let text = (try? await git.content(of: filePath, at: commit.id)) ?? ""
-            contents[commit.id] = text
+        for (offset, commit) in needed.enumerated() where contents[commit.id] == nil {
+            do {
+                if let text = try await git.content(of: commit.path ?? path, at: commit.id) {
+                    contents[commit.id] = text
+                } else if offset == 0 {
+                    // The selected version must exist; an older one may legitimately be missing (creation).
+                    failedVersions.insert(commit.id)
+                } else {
+                    contents[commit.id] = ""
+                }
+            } catch {
+                if offset == 0 { failedVersions.insert(commit.id) } else { contents[commit.id] = "" }
+            }
         }
     }
 

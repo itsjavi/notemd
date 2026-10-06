@@ -10,6 +10,8 @@ import UniformTypeIdentifiers
     /// Bumped when the text is replaced from disk (revert, external change).
     var revision = 0
     var isMarkdown = true
+    /// Set when the file's encoding couldn't be decoded faithfully; saving would corrupt it.
+    var isReadOnly = false
     @ObservationIgnored weak var document: NSDocument?
     @ObservationIgnored var onEdit: (() -> Void)?
 
@@ -37,26 +39,28 @@ final class TextFileDocument: NSDocument {
     nonisolated override class var autosavesInPlace: Bool { true }
 
     nonisolated override func read(from data: Data, ofType typeName: String) throws {
-        let (text, encoding) = try Self.decode(data)
+        let (text, encoding, lossy) = try Self.decode(data)
         // Documents aren't read concurrently, so this runs on the main thread.
         MainActor.assumeIsolated {
             self.encoding = encoding
+            model.isReadOnly = lossy
             model.isMarkdown = Self.isMarkdown(typeName: typeName, url: fileURL)
             model.text = text
             model.revision += 1
         }
     }
 
-    private nonisolated static func decode(_ data: Data) throws -> (String, String.Encoding) {
-        if let utf8 = String(data: data, encoding: .utf8) { return (utf8, .utf8) }
+    private nonisolated static func decode(_ data: Data) throws -> (String, String.Encoding, Bool) {
+        if let utf8 = String(data: data, encoding: .utf8) { return (utf8, .utf8, false) }
         var converted: NSString?
         var usedLossy: ObjCBool = false
         let detected = NSString.stringEncoding(for: data, encodingOptions: nil, convertedString: &converted, usedLossyConversion: &usedLossy)
         guard let converted, detected != 0 else { throw CocoaError(.fileReadInapplicableStringEncoding) }
-        return (converted as String, String.Encoding(rawValue: detected))
+        return (converted as String, String.Encoding(rawValue: detected), usedLossy.boolValue)
     }
 
     override func data(ofType typeName: String) throws -> Data {
+        guard !model.isReadOnly else { throw CocoaError(.fileWriteInapplicableStringEncoding) }
         guard let data = model.text.data(using: encoding) ?? model.text.data(using: .utf8) else {
             throw CocoaError(.fileWriteInapplicableStringEncoding)
         }
@@ -140,7 +144,16 @@ struct DocumentEditorView: View {
                     .pickerStyle(.segmented)
                     .labelStyle(.iconOnly)
                 }
-            } else {
+            }
+            if model.isReadOnly {
+                ToolbarItem {
+                    Label("Read Only", systemImage: "lock")
+                        .labelStyle(.titleAndIcon)
+                        .foregroundStyle(.secondary)
+                        .help("This file's text encoding couldn't be read exactly, so editing is off to avoid damaging it")
+                }
+            }
+            if !model.isMarkdown {
                 ToolbarItem {
                     Label("Plain Text", systemImage: "doc.plaintext")
                         .labelStyle(.titleAndIcon)
@@ -160,6 +173,7 @@ struct DocumentEditorView: View {
             text: model.text,
             revision: model.revision,
             isMarkdown: model.isMarkdown,
+            isEditable: !model.isReadOnly,
             font: settings.editorFont(monospacedOverride: !model.isMarkdown),
             readableWidth: model.isMarkdown && settings.readableLineWidth && mode != .split ? 760 : 0,
             spellChecking: settings.spellChecking,

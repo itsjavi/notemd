@@ -127,11 +127,11 @@ public struct TemplateRenderer: Sendable {
             let before = i > 0 && tokens[i - 1].kind == .text ? tokens[i - 1].raw : (i == 0 ? "" : nil)
             let after = i + 1 < tokens.count && tokens[i + 1].kind == .text ? tokens[i + 1].raw : (i + 1 == tokens.count ? "" : nil)
             guard let before, let after else { continue }
-            let lineStart = before.lastIndex(of: "\n").map { before.index(after: $0) } ?? before.startIndex
+            let lineStart = before.lastIndex(where: \.isNewline).map { before.index(after: $0) } ?? before.startIndex
             let prefix = before[lineStart...]
-            let beforeIsLineStart = before.contains("\n") || i == 0 || (i > 0 && isPrecededByLineBreak(tokens, i - 1))
+            let beforeIsLineStart = before.contains(where: \.isNewline) || i == 0 || (i > 0 && isPrecededByLineBreak(tokens, i - 1))
             guard beforeIsLineStart, prefix.allSatisfy({ $0 == " " || $0 == "\t" }) else { continue }
-            let lineEnd = after.firstIndex(of: "\n")
+            let lineEnd = after.firstIndex(where: \.isNewline)
             let suffix = after[..<(lineEnd ?? after.endIndex)]
             guard suffix.allSatisfy({ $0 == " " || $0 == "\t" || $0 == "\r" }) else { continue }
             guard lineEnd != nil || i + 1 >= tokens.count - 1 else { continue }

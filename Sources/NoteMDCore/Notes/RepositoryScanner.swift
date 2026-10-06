@@ -29,7 +29,7 @@ public enum RepositoryScanner {
 
     /// Scans `rootURL`. Notes whose size and modification date match `previous` are reused without re-reading.
     public static func scan(rootURL: URL, previous: [String: Note] = [:]) throws -> RepositorySnapshot {
-        let root = rootURL.standardizedFileURL.resolvingSymlinksInPath()
+        let root = rootURL.canonical
         var notes: [Note] = []
         let tree = try scanFolder(root, relativePath: "", name: root.lastPathComponent, previous: previous, notes: &notes)
         return RepositorySnapshot(root: tree, notes: notes)

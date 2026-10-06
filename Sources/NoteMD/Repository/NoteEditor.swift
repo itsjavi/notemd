@@ -18,6 +18,8 @@ import Observation
 
     @ObservationIgnored private var lastSavedText: String
     @ObservationIgnored private var saveWork: DispatchWorkItem?
+    /// Set for freshly created notes so the editor takes keyboard focus once.
+    @ObservationIgnored var wantsFocus = false
     @ObservationIgnored var onSave: ((NoteEditor) -> Void)?
     @ObservationIgnored var onSaveError: ((Error) -> Void)?
 
@@ -120,7 +122,7 @@ import Observation
             return true
         }
         do {
-            try Data(text.utf8).write(to: url, options: .atomic)
+            try SafeFileWriter.write(Data(text.utf8), to: url)
             lastSavedText = text
             isDirty = false
             onSave?(self)

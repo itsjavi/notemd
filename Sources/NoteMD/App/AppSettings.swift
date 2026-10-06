@@ -64,6 +64,8 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
     var editorMode: EditorMode { didSet { defaults.set(editorMode.rawValue, forKey: Keys.editorMode) } }
     var sortOrder: NoteSortOrder { didSet { defaults.set(sortOrder.rawValue, forKey: Keys.sortOrder) } }
     var includeSubfolders: Bool { didSet { defaults.set(includeSubfolders, forKey: Keys.includeSubfolders) } }
+    /// Remote images can track when a file is opened; off means only local images load.
+    var loadRemoteImages: Bool { didSet { defaults.set(loadRemoteImages, forKey: Keys.loadRemoteImages) } }
     /// Most recent first, `~`-abbreviated paths.
     var recentRepositories: [String] { didSet { defaults.set(recentRepositories, forKey: Keys.recentRepositories) } }
     /// Repositories open at quit, reopened at launch.
@@ -79,6 +81,7 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
         static let editorMode = "editorMode"
         static let sortOrder = "sortOrder"
         static let includeSubfolders = "includeSubfolders"
+        static let loadRemoteImages = "loadRemoteImages"
         static let recentRepositories = "recentRepositories"
         static let openRepositories = "openRepositories"
     }
@@ -94,6 +97,7 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
             Keys.editorMode: EditorMode.edit.rawValue,
             Keys.sortOrder: NoteSortOrder.modified.rawValue,
             Keys.includeSubfolders: true,
+            Keys.loadRemoteImages: true,
         ])
         commitDelay = defaults.double(forKey: Keys.commitDelay)
         editorFontStyle = EditorFontStyle(rawValue: defaults.string(forKey: Keys.editorFontStyle) ?? "") ?? .system
@@ -104,6 +108,7 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
         editorMode = EditorMode(rawValue: defaults.string(forKey: Keys.editorMode) ?? "") ?? .edit
         sortOrder = NoteSortOrder(rawValue: defaults.string(forKey: Keys.sortOrder) ?? "") ?? .modified
         includeSubfolders = defaults.bool(forKey: Keys.includeSubfolders)
+        loadRemoteImages = defaults.bool(forKey: Keys.loadRemoteImages)
         recentRepositories = defaults.stringArray(forKey: Keys.recentRepositories) ?? []
         openRepositories = defaults.stringArray(forKey: Keys.openRepositories) ?? []
     }
@@ -138,21 +143,5 @@ enum PathDisplay {
 
     static func expand(_ path: String) -> URL {
         URL(fileURLWithPath: (path as NSString).expandingTildeInPath, isDirectory: true).standardizedFileURL
-    }
-}
-
-extension URL {
-    /// The real path (symlinks resolved, `/tmp` → `/private/tmp`), matching what FSEvents reports.
-    /// Unlike `resolvingSymlinksInPath()`, it never strips `/private`.
-    var canonical: URL {
-        let path = (self.path as NSString).standardizingPath
-        guard let resolved = realpath(path, nil) else {
-            // Not on disk yet: canonicalize the parent and keep the last component.
-            let parent = deletingLastPathComponent()
-            guard parent.path != path, !parent.path.isEmpty else { return URL(fileURLWithPath: path) }
-            return parent.canonical.appendingPathComponent(lastPathComponent, isDirectory: hasDirectoryPath)
-        }
-        defer { free(resolved) }
-        return URL(fileURLWithPath: String(cString: resolved), isDirectory: hasDirectoryPath)
     }
 }

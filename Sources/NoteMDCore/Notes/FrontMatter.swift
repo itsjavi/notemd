@@ -9,6 +9,8 @@ import Yams
 public struct MarkdownText: Sendable, Equatable {
     public var frontMatter: FrontMatter?
     public var body: String
+    /// The delimiter lines as read (`---\r\n`, `...`, trailing spaces), so unedited files round-trip byte for byte.
+    private var original: (opening: String, yaml: String, closing: String, bom: Bool)?
 
     public init(frontMatter: FrontMatter?, body: String) {
         self.frontMatter = frontMatter
@@ -16,35 +18,51 @@ public struct MarkdownText: Sendable, Equatable {
     }
 
     public init(_ text: String) {
-        let normalized = text.hasPrefix("\u{FEFF}") ? String(text.dropFirst()) : text
+        let hasBOM = text.hasPrefix("\u{FEFF}")
+        let normalized = hasBOM ? String(text.dropFirst()) : text
         guard let split = Self.splitFrontMatter(normalized) else {
-            self.init(frontMatter: nil, body: normalized)
+            self.init(frontMatter: nil, body: text)
             return
         }
         self.init(frontMatter: FrontMatter(yaml: split.yaml), body: split.body)
+        original = (split.opening, split.yaml, split.closing, hasBOM)
+    }
+
+    public static func == (lhs: Self, rhs: Self) -> Bool {
+        lhs.text == rhs.text
     }
 
     /// The full text, front matter included.
     public var text: String {
-        guard let frontMatter, !frontMatter.isEmpty else { return body }
-        return "---\n" + frontMatter.yaml + "---\n" + body
+        guard let frontMatter else { return body }
+        if let original, frontMatter.yaml == original.yaml {
+            // Untouched front matter keeps its exact delimiters, even when empty.
+            return (original.bom ? "\u{FEFF}" : "") + original.opening + original.yaml + original.closing + body
+        }
+        guard !frontMatter.isEmpty else { return body }
+        let opening = original?.opening ?? "---\n"
+        var closing = original?.closing ?? "---\n"
+        if !(closing as NSString).hasSuffix("\n") { closing += "\n" }
+        return (original?.bom == true ? "\u{FEFF}" : "") + opening + frontMatter.yaml + closing + body
     }
 
     /// Splits `---\n<yaml>---\n<body>`; returns nil without a closing delimiter.
     /// Works on line ranges so CRLF files keep their line endings.
-    static func splitFrontMatter(_ text: String) -> (yaml: String, body: String)? {
+    static func splitFrontMatter(_ text: String) -> (opening: String, yaml: String, closing: String, body: String)? {
         let ns = text as NSString
         guard ns.length >= 4 else { return nil }
         let firstLine = ns.lineRange(for: NSRange(location: 0, length: 0))
-        guard ns.substring(with: firstLine).trimmingCharacters(in: .newlines) == "---" else { return nil }
+        let opening = ns.substring(with: firstLine)
+        guard opening.trimmingCharacters(in: .newlines) == "---", (opening as NSString).hasSuffix("\n") else { return nil }
         let yamlStart = NSMaxRange(firstLine)
         var location = yamlStart
         while location < ns.length {
             let line = ns.lineRange(for: NSRange(location: location, length: 0))
-            let content = ns.substring(with: line).trimmingCharacters(in: .newlines)
+            let closing = ns.substring(with: line)
+            let content = closing.trimmingCharacters(in: .whitespacesAndNewlines)
             if content == "---" || content == "..." {
                 let yaml = ns.substring(with: NSRange(location: yamlStart, length: line.location - yamlStart))
-                return (yaml, ns.substring(from: NSMaxRange(line)))
+                return (opening, yaml, closing, ns.substring(from: NSMaxRange(line)))
             }
             location = NSMaxRange(line)
         }
@@ -77,6 +95,12 @@ public struct FrontMatter: Sendable, Equatable {
     public var yaml: String { entries.map(\.raw).joined() }
     public var isEmpty: Bool { yaml.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
     public var keys: [String] { entries.compactMap(\.key) }
+    /// Lines between the delimiters.
+    public var lineCount: Int {
+        var count = 0
+        (yaml as NSString).enumerateLines { _, _ in count += 1 }
+        return count
+    }
 
     public var title: String? { parsed.title }
     public var tags: [String] { parsed.tags }
@@ -89,6 +113,7 @@ public struct FrontMatter: Sendable, Equatable {
 
     public mutating func setTags(_ tags: [String]) {
         let cleaned = Tag.normalizedList(tags)
+        setEntry("tag", raw: nil)
         setEntry("tags", raw: cleaned.isEmpty ? nil : "tags: [" + cleaned.map(YAMLScalar.flow).joined(separator: ", ") + "]\n")
     }
 
@@ -98,11 +123,14 @@ public struct FrontMatter: Sendable, Equatable {
     }
 
     public mutating func setParameters(_ parameters: [TemplateParameter]) {
+        setEntry("parameters", raw: nil)
         setEntry("params", raw: parameters.isEmpty ? nil : TemplateParameter.yaml(for: parameters))
     }
 
     /// Replaces (or appends, or removes when `raw` is nil) a top-level entry and re-parses.
-    mutating func setEntry(_ key: String, raw: String?) {
+    mutating func setEntry(_ key: String, raw newRaw: String?) {
+        // Match the file's line endings so edits don't mix CRLF and LF.
+        let raw = yaml.contains("\r\n") ? newRaw?.replacingOccurrences(of: "\n", with: "\r\n") : newRaw
         if let index = entries.firstIndex(where: { $0.key == key }) {
             if let raw {
                 entries[index].raw = Self.keepingTrailingTrivia(of: entries[index].raw, replacement: raw)
@@ -110,8 +138,8 @@ public struct FrontMatter: Sendable, Equatable {
                 entries.remove(at: index)
             }
         } else if let raw {
-            if let last = entries.indices.last, !entries[last].raw.hasSuffix("\n") {
-                entries[last].raw += "\n"
+            if let last = entries.indices.last, !(entries[last].raw as NSString).hasSuffix("\n") {
+                entries[last].raw += yaml.contains("\r\n") ? "\r\n" : "\n"
             }
             entries.append(Entry(key: key, raw: raw))
         }
@@ -181,7 +209,8 @@ public struct FrontMatter: Sendable, Equatable {
         guard !yaml.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty else { return (values, nil) }
         let object: Any?
         do {
-            object = try Yams.load(yaml: yaml)
+            // Dates stay strings: Yams would read `2024-03-15` as UTC midnight and shift it a day west of UTC.
+            object = try Yams.load(yaml: yaml, Resolver.default.removing(.timestamp))
         } catch {
             return (values, String(describing: error))
         }

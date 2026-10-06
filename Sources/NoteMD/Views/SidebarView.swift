@@ -62,18 +62,24 @@ struct SidebarView: View {
     }
 }
 
+/// Drag payloads between the note list and sidebar. A per-launch token keeps text dragged
+/// from other apps from being treated as a move request; the store also validates paths.
 enum SidebarDrop {
-    static func notePayload(_ path: String) -> String { "note:" + path }
-    static func folderPayload(_ path: String) -> String { "folder:" + path }
+    private static let token = UUID().uuidString
+    private static var notePrefix: String { "notemd:\(token):note:" }
+    private static var folderPrefix: String { "notemd:\(token):folder:" }
+
+    static func notePayload(_ path: String) -> String { notePrefix + path }
+    static func folderPayload(_ path: String) -> String { folderPrefix + path }
 
     @MainActor static func perform(_ items: [String], into folder: String, store: RepositoryStore) -> Bool {
         var handled = false
         for item in items {
-            if item.hasPrefix("note:") {
-                store.moveNote(String(item.dropFirst(5)), toFolder: folder)
+            if item.hasPrefix(notePrefix) {
+                store.moveNote(String(item.dropFirst(notePrefix.count)), toFolder: folder)
                 handled = true
-            } else if item.hasPrefix("folder:") {
-                store.moveFolder(String(item.dropFirst(7)), into: folder)
+            } else if item.hasPrefix(folderPrefix) {
+                store.moveFolder(String(item.dropFirst(folderPrefix.count)), into: folder)
                 handled = true
             }
         }
@@ -162,6 +168,7 @@ private struct SidebarFooter: View {
 
 private struct GitStatusLine: View {
     @Environment(RepositoryStore.self) private var store
+    @State private var confirmEnable = false
 
     var body: some View {
         HStack(spacing: 6) {
@@ -172,6 +179,17 @@ private struct GitStatusLine: View {
             case .disabled(let reason):
                 Image(systemName: "clock.badge.xmark").foregroundStyle(.secondary)
                 Text("History off").help(reason)
+            case .needsConsent(let reason):
+                Image(systemName: "clock.badge.questionmark").foregroundStyle(.orange)
+                Text("History off").help(reason)
+                Spacer(minLength: 4)
+                Button("Turn On…") { confirmEnable = true }
+                    .buttonStyle(.link)
+                    .confirmationDialog("Version everything in “\(store.name)” with git?", isPresented: $confirmEnable) {
+                        Button("Turn On History") { Task { await store.enableVersioning() } }
+                    } message: {
+                        Text(reason + " Files matching .gitignore are skipped.")
+                    }
             case .clean(let date):
                 Image(systemName: "checkmark.circle.fill").foregroundStyle(.green)
                 if let date {

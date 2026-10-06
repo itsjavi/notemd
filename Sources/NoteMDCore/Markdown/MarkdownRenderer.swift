@@ -30,7 +30,7 @@ public enum MarkdownRenderer {
         var lineOffset = 0
         if let frontMatter = text.frontMatter {
             // Keep source positions aligned with the full document.
-            lineOffset = frontMatter.yaml.split(separator: "\n", omittingEmptySubsequences: false).count + 1
+            lineOffset = frontMatter.lineCount + 2
             if options.frontMatter == .table, !frontMatter.displayValues.isEmpty {
                 output += frontMatterTable(frontMatter)
             }

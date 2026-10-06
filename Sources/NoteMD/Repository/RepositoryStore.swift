@@ -67,6 +67,8 @@ enum RepositorySheet: Identifiable {
 enum GitState: Equatable {
     case starting
     case disabled(String)
+    /// Folder looks like more than notes (home folder, many other files): ask before `git init`.
+    case needsConsent(String)
     case clean(lastCommit: Date?)
     case pending
     case committing
@@ -111,6 +113,7 @@ enum GitState: Equatable {
     @ObservationIgnored private var notesByPath: [String: Note] = [:]
     @ObservationIgnored private var watcher: FileWatcher?
     @ObservationIgnored private(set) var git: GitClient?
+    @ObservationIgnored private var gitExecutable: URL?
     @ObservationIgnored private var autoCommitter: AutoCommitter?
     @ObservationIgnored private var isScanning = false
     @ObservationIgnored private var needsRescan = false
@@ -197,7 +200,7 @@ enum GitState: Equatable {
     private func filesChanged(_ paths: [String]) {
         let rootPath = rootURL.path
         let relevant = paths.contains { path in
-            guard path.hasPrefix(rootPath) else { return false }
+            guard path == rootPath || path.hasPrefix(rootPath + "/") else { return false }
             let relative = String(path.dropFirst(rootPath.count))
             if relative.contains("/.git/") || relative.hasSuffix("/.git") { return false }
             let components = relative.split(separator: "/")
@@ -213,17 +216,45 @@ enum GitState: Equatable {
     /// Picks up external edits to the open note, or closes it when its file disappeared.
     private func reconcileOpenNote() {
         guard let editor else { return }
-        guard notesByPath[editor.path] != nil else {
-            if !FileManager.default.fileExists(atPath: editor.url.path) {
-                self.editor = nil
-                selectedNoteID = nil
+        guard FileManager.default.fileExists(atPath: editor.url.path) else {
+            if editor.isDirty {
+                // Unsaved typing wins: write it back rather than lose it.
+                editor.save()
+                return
+            }
+            // Tools like git checkout or sync clients delete and recreate files; give them a moment.
+            DispatchQueue.main.asyncAfter(deadline: .now() + 1.0) { [weak self, weak editor] in
+                MainActor.assumeIsolated {
+                    guard let self, let editor, self.editor === editor, !editor.isDirty,
+                          !FileManager.default.fileExists(atPath: editor.url.path) else { return }
+                    self.editor = nil
+                    self.selectedNoteID = nil
+                }
             }
             return
         }
         guard let diskText = RepositoryScanner.readText(editor.url), !editor.isOwnWrite(diskText) else { return }
         if !editor.isDirty {
             editor.replaceText(diskText, markSaved: true)
+        } else {
+            saveConflictCopy(of: editor, diskText: diskText)
         }
+    }
+
+    /// Another app changed the open note while it had unsaved edits: keep both versions.
+    private func saveConflictCopy(of editor: NoteEditor, diskText: String) {
+        let stamp = Date().formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
+            .replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "")
+        let base = (editor.url.lastPathComponent as NSString).deletingPathExtension + " (changed elsewhere \(stamp))"
+        let target = NoteFileName.uniqueURL(in: editor.url.deletingLastPathComponent(), base: base, pathExtension: editor.url.pathExtension)
+        do {
+            try Data(diskText.utf8).write(to: target, options: .withoutOverwriting)
+            errorMessage = "“\(editor.title)” was changed by another app while you were editing. Your version is kept; the other one was saved as “\(target.lastPathComponent)”."
+        } catch {
+            errorMessage = "“\(editor.title)” was changed by another app while you were editing, and the other version couldn't be saved: \(error.localizedDescription)"
+        }
+        editor.save()
+        Task { await reload() }
     }
 
     // MARK: Visible notes
@@ -286,7 +317,13 @@ enum GitState: Equatable {
 
     private func openSelectedNote(previousPath: String?) {
         if let editor {
-            editor.save()
+            guard editor.save() else {
+                // Keep the note with unsaved edits open; `onSaveError` already explained why.
+                suppressReopen = true
+                selectedNoteID = previousPath
+                suppressReopen = false
+                return
+            }
             if let previousPath { finalizeName(of: previousPath) }
         }
         guard let path = selectedNoteID, let note = notesByPath[path] ?? scanSingle(path) else {
@@ -369,8 +406,13 @@ enum GitState: Equatable {
     func relativePath(of url: URL) -> String {
         let path = url.canonical.path
         let rootPath = rootURL.path
-        guard path.hasPrefix(rootPath) else { return url.lastPathComponent }
+        guard path == rootPath || path.hasPrefix(rootPath + "/") else { return url.lastPathComponent }
         return String(path.dropFirst(rootPath.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    /// Only folders from the scanned tree: drag payloads and links can't reach outside the repository.
+    func isKnownFolder(_ path: String) -> Bool {
+        SafeFileWriter.isSafeRelativePath(path) && root.find(path) != nil
     }
 
     func url(forFolder path: String) -> URL {
@@ -411,9 +453,9 @@ enum GitState: Equatable {
         }
         refreshVisibleNotes()
         selectedNoteID = path
+        editor?.wantsFocus = true
         autoCommitter?.markDirty()
         updatePendingState()
-        NotificationCenter.default.post(name: .focusEditor, object: self)
         return path
     }
 
@@ -426,7 +468,7 @@ enum GitState: Equatable {
     }
 
     func moveNote(_ path: String, toFolder folderPath: String) {
-        guard let note = notesByPath[path], note.folderPath != folderPath else { return }
+        guard let note = notesByPath[path], note.folderPath != folderPath, isKnownFolder(folderPath) else { return }
         let target = NoteFileName.uniqueURL(in: url(forFolder: folderPath), base: note.baseName, pathExtension: note.url.pathExtension)
         move(note: note, to: target)
     }
@@ -507,6 +549,7 @@ enum GitState: Equatable {
     }
 
     func reveal(_ path: String) {
+        guard SafeFileWriter.isSafeRelativePath(path) else { return }
         NSWorkspace.shared.activateFileViewerSelecting([rootURL.appendingPathComponent(path)])
     }
 
@@ -571,7 +614,8 @@ enum GitState: Equatable {
     }
 
     func moveFolder(_ path: String, into parent: String) {
-        guard !path.isEmpty, path != parent, !parent.hasPrefix(path + "/"), (path as NSString).deletingLastPathComponent != parent else { return }
+        guard !path.isEmpty, path != parent, !parent.hasPrefix(path + "/"), (path as NSString).deletingLastPathComponent != parent,
+              isKnownFolder(path), isKnownFolder(parent) else { return }
         let source = url(forFolder: path)
         let target = NoteFileName.uniqueURL(in: url(forFolder: parent), base: source.lastPathComponent, pathExtension: nil)
         editor?.save()
@@ -596,7 +640,7 @@ enum GitState: Equatable {
     }
 
     func trashFolder(_ path: String) {
-        guard !path.isEmpty else { return }
+        guard !path.isEmpty, isKnownFolder(path) else { return }
         if let editor, editor.path.hasPrefix(path + "/") {
             editor.save()
             self.editor = nil
@@ -623,18 +667,46 @@ enum GitState: Equatable {
         let client = GitClient(repositoryURL: rootURL, executableURL: executable)
         if !(await client.isRepositoryRoot()) {
             if let topLevel = try? await client.run(["rev-parse", "--show-toplevel"]).trimmingCharacters(in: .whitespacesAndNewlines), !topLevel.isEmpty {
-                git = client
-                gitState = .disabled("This folder is inside the git repository at \(PathDisplay.abbreviate(URL(fileURLWithPath: topLevel))). Automatic commits are off to avoid committing unrelated files.")
+                // Paths and commits would refer to the parent repository; stay out of it entirely.
+                gitState = .disabled("This folder is inside the git repository at \(PathDisplay.abbreviate(URL(fileURLWithPath: topLevel))). Open that repository's root, or a folder outside it, to get version history.")
+                return
+            }
+            if let reason = await Task.detached(operation: { [rootURL] in RepositoryVetting.reasonToConfirm(rootURL) }).value {
+                gitExecutable = executable
+                gitState = .needsConsent(reason)
                 return
             }
             do {
-                try await client.initialize()
-                try await client.commitAll(message: "Start versioning notes with NoteMD")
+                try await initializeRepository(client)
             } catch {
                 gitState = .failed(error.localizedDescription)
                 return
             }
         }
+        startVersioning(client)
+    }
+
+    /// Turns on versioning after the user confirmed it for this folder.
+    func enableVersioning() async {
+        guard case .needsConsent = gitState, let executable = gitExecutable else { return }
+        let client = GitClient(repositoryURL: rootURL, executableURL: executable)
+        gitState = .starting
+        do {
+            try await initializeRepository(client)
+        } catch {
+            gitState = .failed(error.localizedDescription)
+            return
+        }
+        startVersioning(client)
+    }
+
+    private func initializeRepository(_ client: GitClient) async throws {
+        try await client.initialize()
+        RepositoryVetting.extendGitignore(at: rootURL)
+        try await client.commitAll(message: "Start versioning notes with NoteMD")
+    }
+
+    private func startVersioning(_ client: GitClient) {
         git = client
         let committer = AutoCommitter(git: client, idleDelay: settings.commitDelay, maxDelay: 300) { [weak self] event in
             DispatchQueue.main.async {
@@ -642,11 +714,17 @@ enum GitState: Equatable {
             }
         }
         autoCommitter = committer
-        gitState = .clean(lastCommit: try? await client.history(for: ".", limit: 1).first?.date)
-        // Commit anything that changed while the app wasn't watching.
-        if let status = try? await client.status(), !status.isEmpty {
-            committer.markDirty()
-            gitState = .pending
+        gitState = .clean(lastCommit: nil)
+        Task {
+            if let timestamp = try? await client.run(["log", "-1", "--format=%at"]).trimmingCharacters(in: .whitespacesAndNewlines),
+               let seconds = TimeInterval(timestamp), case .clean = gitState {
+                gitState = .clean(lastCommit: Date(timeIntervalSince1970: seconds))
+            }
+            // Commit anything that changed while the app wasn't watching.
+            if let status = try? await client.status(), !status.isEmpty {
+                committer.markDirty()
+                gitState = .pending
+            }
         }
     }
 
@@ -666,14 +744,14 @@ enum GitState: Equatable {
     private func updatePendingState() {
         guard autoCommitter != nil else { return }
         switch gitState {
-        case .disabled, .starting: break
+        case .disabled, .starting, .needsConsent: break
         default: gitState = .pending
         }
     }
 
     var isVersioned: Bool {
         switch gitState {
-        case .starting, .disabled: false
+        case .starting, .disabled, .needsConsent: false
         default: true
         }
     }
@@ -693,7 +771,7 @@ enum GitState: Equatable {
         let url = rootURL.appendingPathComponent(path)
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try Data(content.utf8).write(to: url, options: .atomic)
+            try SafeFileWriter.write(Data(content.utf8), to: url)
         } catch {
             errorMessage = "Couldn't restore the note: \(error.localizedDescription)"
             return
@@ -703,13 +781,9 @@ enum GitState: Equatable {
         }
         _ = scanSingle(path)
         refreshVisibleNotes()
-        if let git {
-            do {
-                try await git.commitAll(message: "Restore \(path) to \(revision.prefix(7))")
-                gitState = .clean(lastCommit: Date())
-            } catch {
-                autoCommitter?.markDirty()
-            }
+        if let autoCommitter {
+            // Through the committer's queue so it never races a timed commit.
+            await autoCommitter.flush(message: "Restore \(path) to \(revision.prefix(7))")
         }
     }
 
@@ -751,6 +825,5 @@ enum GitState: Equatable {
 }
 
 extension Notification.Name {
-    static let focusEditor = Notification.Name("NoteMDFocusEditor")
     static let repositoryCommitted = Notification.Name("NoteMDRepositoryCommitted")
 }

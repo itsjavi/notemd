@@ -58,7 +58,7 @@ struct NoteEditorPane: View {
             font: settings.editorFont(),
             readableWidth: settings.readableLineWidth && settings.editorMode != .split ? 740 : 0,
             spellChecking: settings.spellChecking,
-            focusOnAppear: false,
+            focusOnAppear: consumeFocus(),
             onChange: { editor.editorTextChanged($0) },
             onScroll: syncScroll ? { line in
                 // Body line numbers are offset by the hidden front matter.
@@ -68,8 +68,15 @@ struct NoteEditorPane: View {
     }
 
     private var frontMatterLineCount: Int {
-        guard let yaml = editor.markdown.frontMatter?.yaml else { return 0 }
-        return yaml.split(separator: "\n", omittingEmptySubsequences: false).count + 1
+        guard let frontMatter = editor.markdown.frontMatter else { return 0 }
+        return frontMatter.lineCount + 2
+    }
+
+    /// New notes put the caret in the editor once.
+    private func consumeFocus() -> Bool {
+        guard editor.wantsFocus else { return false }
+        DispatchQueue.main.async { editor.wantsFocus = false }
+        return true
     }
 
     private var preview: some View {

@@ -21,13 +21,18 @@ enum DebugHooks {
     }
 
     static func handle(_ url: URL) {
-        guard url.scheme == AppVariant.urlScheme, AppVariant.name != "release" else { return }
+        // Only the agents' Test build, and only for repositories in temp folders.
+        guard url.scheme == AppVariant.urlScheme, AppVariant.name == "test" else { return }
         let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
         var query: [String: String] = [:]
         for item in components?.queryItems ?? [] { query[item.name] = item.value ?? "" }
+        let verb = (url.host() ?? "") + url.path()
         // Optional `repo=<path suffix>` targets a specific repository window.
         targetRepo = query["repo"]
-        let verb = (url.host() ?? "") + url.path()
+        for key in ["note", "path", "folder", "parent"] {
+            if let value = query[key], !SafeFileWriter.isSafeRelativePath(value) && safePath(value) == nil { return }
+        }
+        if verb.hasPrefix("ui/"), let store, safePath(store.rootURL.path) == nil { return }
         switch verb {
         case "ui/open-repo":
             if let path = safePath(query["path"]) { windows.openRepository(URL(fileURLWithPath: path)) }
@@ -100,6 +105,12 @@ enum DebugHooks {
                     store.errorMessage = "restore: \(error)"
                 }
             }
+        case "ui/move":
+            if let store, let note = query["note"] { store.moveNote(note, toFolder: query["folder"] ?? "") }
+        case "ui/move-folder":
+            if let store, let path = query["path"] { store.moveFolder(path, into: query["parent"] ?? "") }
+        case "ui/rename":
+            if let store, let note = query["note"], let name = query["name"] { store.renameNote(note, to: name) }
         case "ui/trash":
             if let store, let path = query["note"] { store.trashNote(path) }
         case "ui/restore-deleted":

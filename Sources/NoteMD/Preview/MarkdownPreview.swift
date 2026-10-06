@@ -100,7 +100,7 @@ struct MarkdownPreview: NSViewRepresentable {
                 pendingHTML = html
             } else {
                 isLoading = true
-                webView.loadHTMLString(PreviewPage.html(body: html), baseURL: base)
+                webView.loadHTMLString(PreviewPage.html(body: html, allowRemoteImages: AppSettings.shared.loadRemoteImages), baseURL: base)
             }
         }
 

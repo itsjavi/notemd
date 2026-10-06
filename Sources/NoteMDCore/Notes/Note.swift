@@ -56,7 +56,7 @@ public enum NoteTitle {
     public static func firstHeading(in body: String) -> String? {
         var inFence = false
         var scanned = 0
-        for line in body.split(separator: "\n", omittingEmptySubsequences: false) {
+        for line in body.split(omittingEmptySubsequences: false, whereSeparator: \.isNewline) {
             scanned += 1
             if scanned > 80 { break }
             let trimmed = line.trimmingCharacters(in: .whitespaces)
@@ -76,7 +76,7 @@ public enum NoteTitle {
         var length = 0
         var inFence = false
         var skippedTitle = false
-        for line in body.split(separator: "\n") {
+        for line in body.split(whereSeparator: \.isNewline) {
             var text = line.trimmingCharacters(in: .whitespaces)
             if text.hasPrefix("```") || text.hasPrefix("~~~") { inFence.toggle(); continue }
             if inFence || text.isEmpty { continue }
@@ -129,10 +129,19 @@ public enum NoteFileName {
             var url = directory.appendingPathComponent(name, isDirectory: pathExtension == nil)
             if let pathExtension { url = url.appendingPathExtension(pathExtension) }
             if url.standardizedFileURL == excluding?.standardizedFileURL { return url }
-            // Case-insensitive volumes: compare existing names case-insensitively.
             if !fileManager.fileExists(atPath: url.path) { return url }
+            // On case-insensitive volumes a case-only rename finds the item itself.
+            if let excluding, isSameItem(url, excluding) { return url }
             attempt += 1
         }
+    }
+
+    private static func isSameItem(_ lhs: URL, _ rhs: URL) -> Bool {
+        let key: Set<URLResourceKey> = [.fileResourceIdentifierKey]
+        guard let left = try? lhs.resourceValues(forKeys: key).fileResourceIdentifier,
+              let right = try? rhs.resourceValues(forKeys: key).fileResourceIdentifier
+        else { return false }
+        return left.isEqual(right)
     }
 
     /// Whether a note still has an automatic name and should follow its heading.

@@ -65,13 +65,6 @@ struct MarkdownEditor: NSViewRepresentable {
                 textView.setSelectedRange(NSRange(location: (textView.string as NSString).length, length: 0))
             }
         }
-        context.coordinator.focusObserver = NotificationCenter.default.addObserver(forName: .focusEditor, object: nil, queue: .main) { [weak textView] _ in
-            MainActor.assumeIsolated {
-                guard let textView else { return }
-                textView.window?.makeFirstResponder(textView)
-                textView.setSelectedRange(NSRange(location: (textView.string as NSString).length, length: 0))
-            }
-        }
         return scrollView
     }
 
@@ -99,7 +92,11 @@ struct MarkdownEditor: NSViewRepresentable {
 
     static func dismantleNSView(_ scrollView: NSScrollView, coordinator: Coordinator) {
         NotificationCenter.default.removeObserver(coordinator)
-        if let observer = coordinator.focusObserver { NotificationCenter.default.removeObserver(observer) }
+        // The window's undo manager outlives this view: drop its actions so ⌘Z can't edit a discarded note.
+        if let textView = coordinator.textView {
+            textView.undoManager?.removeAllActions(withTarget: textView)
+            if let storage = textView.textStorage { textView.undoManager?.removeAllActions(withTarget: storage) }
+        }
     }
 
     /// Applies settings; returns true when styling needs a refresh.
@@ -125,7 +122,6 @@ struct MarkdownEditor: NSViewRepresentable {
         var revision = 0
         var styledFont: NSFont?
         var isApplyingExternalText = false
-        var focusObserver: NSObjectProtocol?
         private var isHighlighting = false
         private var lastReportedLine = 0
 

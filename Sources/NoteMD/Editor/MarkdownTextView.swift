@@ -100,8 +100,8 @@ final class MarkdownTextView: NSTextView {
         let ns = string as NSString
         let lines = ns.lineRange(for: selectedRange())
         let text = ns.substring(with: lines)
-        return text.split(separator: "\n").allSatisfy { line in
-            Self.listPattern.firstMatch(in: String(line), range: NSRange(location: 0, length: (String(line) as NSString).length)) != nil
+        return text.components(separatedBy: "\n").filter { !$0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }.allSatisfy { line in
+            Self.listPattern.firstMatch(in: line, range: NSRange(location: 0, length: (line as NSString).length)) != nil
         }
     }
 
@@ -197,7 +197,7 @@ final class MarkdownTextView: NSTextView {
 
     private func toggleLinePrefix(_ prefix: String) {
         let ns = string as NSString
-        let lines = ns.substring(with: ns.lineRange(for: selectedRange())).split(separator: "\n", omittingEmptySubsequences: false)
+        let lines = ns.substring(with: ns.lineRange(for: selectedRange())).components(separatedBy: "\n")
         let content = lines.filter { !$0.trimmingCharacters(in: .whitespaces).isEmpty }
         let numbered = prefix == "1. "
         let allPrefixed = !content.isEmpty && content.allSatisfy { line in
@@ -234,12 +234,14 @@ final class MarkdownTextView: NSTextView {
     private func transformSelectedLines(_ transform: (String) -> String) {
         let ns = string as NSString
         let selection = selectedRange()
-        var lineRange = ns.lineRange(for: selection)
-        var text = ns.substring(with: lineRange)
+        let lineRange = ns.lineRange(for: selection)
+        // NSString line handling: "\r\n" is one Character in Swift, so String.split would miss it.
+        var text = ns.substring(with: lineRange) as NSString
         let hadTrailingNewline = text.hasSuffix("\n")
-        if hadTrailingNewline { text.removeLast() }
-        if text.isEmpty && lineRange.length == 0 { lineRange = NSRange(location: selection.location, length: 0) }
-        let lines = text.split(separator: "\n", omittingEmptySubsequences: false).map { transform(String($0)) }
+        if hadTrailingNewline { text = text.substring(to: text.length - 1) as NSString }
+        let lines = (text as String).components(separatedBy: "\n").map { line in
+            line.hasSuffix("\r") ? transform(String(line.dropLast())) + "\r" : transform(line)
+        }
         let replacement = lines.joined(separator: "\n") + (hadTrailingNewline ? "\n" : "")
         insertText(replacement, replacementRange: lineRange)
         let newLength = (replacement as NSString).length - (hadTrailingNewline ? 1 : 0)

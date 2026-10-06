@@ -24,6 +24,15 @@ struct SettingsView: View {
                     Toggle("Show notes from subfolders in folders", isOn: $settings.includeSubfolders)
                     Toggle("Show front matter in the editor", isOn: $settings.showFrontMatter)
                 }
+                Section {
+                    Toggle("Load remote images in previews", isOn: $settings.loadRemoteImages)
+                } header: {
+                    Text("Privacy")
+                } footer: {
+                    Text("Images from the web can tell their server when you open a file. Applies to previews opened after the change.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
             }
             .formStyle(.grouped)
             .tabItem { Label("General", systemImage: "gearshape") }

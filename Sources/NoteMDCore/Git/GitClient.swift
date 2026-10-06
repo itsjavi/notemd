@@ -62,7 +62,8 @@ public struct GitClient: Sendable {
         do {
             return try await ProcessRunner.run(
                 executableURL: executableURL,
-                arguments: ["-c", "core.quotePath=false"] + arguments,
+                // fsmonitor could run a command configured by a downloaded repository.
+                arguments: ["-c", "core.quotePath=false", "-c", "core.fsmonitor=false"] + arguments,
                 currentDirectoryURL: repositoryURL,
                 environment: processEnvironment)
         } catch {
