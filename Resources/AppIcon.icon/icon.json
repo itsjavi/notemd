@@ -1,0 +1,45 @@
+{
+  "fill-specializations": [
+    {
+      "value": {
+        "linear-gradient": [
+          "extended-srgb:0.10588,0.58824,0.56078,1.00000",
+          "extended-srgb:0.04314,0.30196,0.35294,1.00000"
+        ],
+        "orientation": {
+          "start": { "x": 0.2, "y": 0 },
+          "stop": { "x": 0.8, "y": 1 }
+        }
+      }
+    },
+    {
+      "appearance": "dark",
+      "value": {
+        "linear-gradient": [
+          "extended-srgb:0.05882,0.34118,0.34118,1.00000",
+          "extended-srgb:0.01569,0.10980,0.14118,1.00000"
+        ],
+        "orientation": {
+          "start": { "x": 0.2, "y": 0 },
+          "stop": { "x": 0.8, "y": 1 }
+        }
+      }
+    }
+  ],
+  "groups": [
+    {
+      "layers": [
+        { "glass": true, "image-name": "heading.png", "name": "heading" },
+        { "glass": true, "image-name": "note.png", "name": "note" },
+        { "glass": true, "image-name": "version.png", "name": "version" }
+      ],
+      "lighting": "individual",
+      "shadow": { "kind": "neutral", "opacity": 0.35 },
+      "specular": true,
+      "translucency": { "enabled": true, "value": 0.2 }
+    }
+  ],
+  "supported-platforms": {
+    "squares": ["macOS"]
+  }
+}

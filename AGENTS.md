@@ -40,6 +40,7 @@ launch workers or enforce filesystem permissions.
 The default agent is the orchestrator.
 
 The orchestrator:
+
 - Turns agreed requirements into actionable backlog tasks.
 - Defines acceptance criteria, dependencies, and priorities.
 - Assigns each execution task to one accountable agent.
@@ -63,12 +64,14 @@ giving multiple workers concurrent ownership of one task.
 ## Task execution
 
 Before starting a task:
+
 1. Read its description, acceptance criteria, dependencies, and notes.
 2. Confirm it is within scope, unblocked, and permitted by your role.
 3. Acquire its active claim.
 4. Set its status to In Progress through the Backlog CLI.
 
 While working:
+
 - Keep implementation plans, decisions, blockers, and evidence in
   the task.
 - Append progress notes without replacing another agent's notes.
@@ -78,6 +81,7 @@ While working:
   release the claim and continue independent eligible work.
 
 Mark a task Done only when:
+
 - Its acceptance criteria are satisfied.
 - Relevant validation has passed, with limitations documented.
 - Its changes are integrated into the main working tree.
@@ -95,6 +99,7 @@ The backlog is the source of truth for requirements, assignments,
 dependencies, progress, decisions, and completion evidence.
 
 Use .local/coordination/ only for runtime coordination:
+
 - sessions/<session-id>.json: nickname, mode, activity, and owned claims.
 - claims/<task-id>/owner.json: owning session and working directory.
 - backlog-write.lock/: short-lived lock for backlog mutations.
@@ -186,3 +191,60 @@ Any file matching these patterns, should not be used as context:
 
 From time to time, please format docs and other code via `npx -y oxfmt .`
 before comitting if you are only the agent running.
+
+## NoteMD project
+
+Native macOS 26 note-taking app and standalone Markdown/text editor (SwiftUI + AppKit, Swift 6, SwiftPM).
+Decisions live in `backlog/decisions/` (platform, storage format, git versioning, rendering).
+
+### Commands
+
+| Command                           | What it does                                                             |
+| --------------------------------- | ------------------------------------------------------------------------ |
+| `swift build` / `make build`      | Debug build of all targets                                               |
+| `swift test` / `make test`        | Core unit tests (Swift Testing)                                          |
+| `make app`                        | Release `build/NoteMD.app` (ad-hoc signed unless `SIGN_IDENTITY` is set) |
+| `make dev` / `make run`           | Debug `build/NoteMD Dev.app` (own bundle id and defaults)                |
+| `make test-app` / `make run-test` | Background agent build `build/NoteMD Test.app`                           |
+| `make install`                    | Quits the installed copy and installs the release build to /Applications |
+| `make icon`                       | Redraws `Resources/AppIcon.icon` from `scripts/make-icon.swift`          |
+
+### Layout
+
+| Path                                                                                        | Contents                                                                                    |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
+| `Sources/NoteMDCore/Notes`                                                                  | Front matter (Yams, raw-entry preserving), notes, folders + `.notemd.json`, scanner, search |
+| `Sources/NoteMDCore/Templates`                                                              | Template parameters and the `{{…}}` renderer                                                |
+| `Sources/NoteMDCore/Markdown`                                                               | cmark-gfm HTML rendering (GFM extensions, alerts, front matter table)                       |
+| `Sources/NoteMDCore/Git`, `Diff`                                                            | git subprocess client, auto-committer, commit messages, line diff                           |
+| `Sources/NoteMD/App`                                                                        | App entry, delegate, window manager, settings, variants                                     |
+| `Sources/NoteMD/Repository`                                                                 | Per-window `RepositoryStore`, open-note `NoteEditor`, FSEvents watcher                      |
+| `Sources/NoteMD/Views`, `Editor`, `Preview`, `Folders`, `Templates`, `History`, `Documents` | UI                                                                                          |
+| `Sources/NoteMD/Debug`                                                                      | URL scheme handler; DEBUG-only test hooks                                                   |
+| `Resources/`                                                                                | Info.plist, privacy manifest, `AppIcon.icon`                                                |
+| `scripts/`                                                                                  | `build-app.sh`, `make-icon.swift`, `window-screenshot.swift`                                |
+
+### Builds
+
+| Build       | Bundle id                 | Scheme           | Who uses it                                            |
+| ----------- | ------------------------- | ---------------- | ------------------------------------------------------ |
+| NoteMD      | `com.itsjavi.notemd`      | `notemd://`      | The user. Agents never launch or install it            |
+| NoteMD Dev  | `com.itsjavi.notemd.dev`  | `notemd-dev://`  | Developer debug runs                                   |
+| NoteMD Test | `com.itsjavi.notemd.test` | `notemd-test://` | Agents: `LSUIElement`, never activates or steals focus |
+
+### Driving the Test build
+
+Launch with `open -g "build/NoteMD Test.app"` and send hooks with
+`open -g -a "$PWD/build/NoteMD Test.app" "notemd-test://<verb>?<query>"`. Add `repo=<path suffix>` to target a window.
+Paths must live under `/private/tmp` or `/private/var/folders`.
+
+- `ui/create-repo?path=` (seeds example notes), `ui/open-repo?path=`, `ui/open-file?path=`, `ui/welcome`
+- `ui/sidebar?item=all|templates|deleted` or `folder=`/`tag=`, `ui/select?note=`, `ui/search?q=`, `ui/mode?value=edit|split|preview`
+- `ui/new-note?title=&body=`, `ui/type?text=`, `ui/tags?value=a,b`, `ui/folder-style?path=&icon=&color=`
+- `ui/sheet?name=history|form|params|rename|folder-new|folder-edit&path=`, `ui/close-sheet`
+- `ui/commit-now`, `ui/restore?path=&rev=`, `ui/window-size?w=&h=`, `ui/appearance?value=dark|light`
+- `debug/state?out=/private/tmp/state.txt` writes a `key: value` state dump
+
+Capture windows without activating the app: `swift scripts/window-screenshot.swift "NoteMD Test" /private/tmp/shot`.
+An open sheet blocks quitting (standard AppKit): close sheets before `quit`, or `pkill` the Test build.
+Real clicks, drags, Finder "Open With" and menu shortcuts still need a human check in the Dev build.
