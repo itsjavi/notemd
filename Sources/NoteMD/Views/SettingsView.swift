@@ -2,12 +2,13 @@ import SwiftUI
 
 struct SettingsView: View {
     private let settings = AppSettings.shared
+    @AppStorage("settingsTab") private var tab = "general"
 
     private let delays: [(String, Double)] = [("10 seconds", 10), ("30 seconds", 30), ("1 minute", 60), ("2 minutes", 120), ("5 minutes", 300)]
 
     var body: some View {
         @Bindable var settings = settings
-        TabView {
+        TabView(selection: $tab) {
             Form {
                 Section {
                     Picker("Save a version after", selection: $settings.commitDelay) {
@@ -36,6 +37,7 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
             .tabItem { Label("General", systemImage: "gearshape") }
+            .tag("general")
 
             Form {
                 Section("Text") {
@@ -48,6 +50,22 @@ struct SettingsView: View {
                     Toggle("Limit line width for comfortable reading", isOn: $settings.readableLineWidth)
                     Toggle("Check spelling while typing", isOn: $settings.spellChecking)
                 }
+                Section {
+                    Picker("Indent using", selection: $settings.indentWithTabs) {
+                        Text("Spaces").tag(false)
+                        Text("Tabs").tag(true)
+                    }
+                    .pickerStyle(.segmented)
+                    Picker(settings.indentWithTabs ? "Tab width" : "Indent width", selection: $settings.indentWidth) {
+                        ForEach([2, 4, 8], id: \.self) { Text("\($0) spaces").tag($0) }
+                    }
+                } header: {
+                    Text("Indentation")
+                } footer: {
+                    Text("What the Tab key inserts in notes and text files. Shift-Tab removes one level. Existing text isn't changed.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
                 Section("Layout") {
                     Picker("Default view", selection: $settings.editorMode) {
                         ForEach(EditorMode.allCases) { Text($0.title).tag($0) }
@@ -56,7 +74,8 @@ struct SettingsView: View {
             }
             .formStyle(.grouped)
             .tabItem { Label("Editor", systemImage: "character.cursor.ibeam") }
+            .tag("editor")
         }
-        .frame(width: 520, height: 400)
+        .frame(width: 520, height: 500)
     }
 }

@@ -175,6 +175,7 @@ struct DocumentEditorView: View {
             isMarkdown: model.isMarkdown,
             isEditable: !model.isReadOnly,
             font: settings.editorFont(monospacedOverride: !model.isMarkdown),
+            indentation: settings.indentation,
             readableWidth: model.isMarkdown && settings.readableLineWidth && mode != .split ? 760 : 0,
             spellChecking: settings.spellChecking,
             onChange: { model.edit($0) },

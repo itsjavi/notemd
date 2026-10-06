@@ -5,6 +5,8 @@ import AppKit
 struct MarkdownHighlighter {
     var baseFont: NSFont
     var isMarkdown: Bool
+    /// Display width of a tab character, in spaces.
+    var tabWidth = 4
 
     private var monoFont: NSFont { .monospacedSystemFont(ofSize: baseFont.pointSize * 0.92, weight: .regular) }
 
@@ -12,6 +14,9 @@ struct MarkdownHighlighter {
         let style = NSMutableParagraphStyle()
         style.lineHeightMultiple = isMarkdown ? 1.22 : 1.1
         style.paragraphSpacing = isMarkdown ? 2 : 0
+        let spaceWidth = (" " as NSString).size(withAttributes: [.font: baseFont]).width
+        style.tabStops = []
+        style.defaultTabInterval = spaceWidth * CGFloat(tabWidth)
         return style
     }
 

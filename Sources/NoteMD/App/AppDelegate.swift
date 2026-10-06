@@ -44,17 +44,20 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         WindowManager.shared.isTerminating = true
         WindowManager.shared.rememberOpenRepositories()
-        Task {
-            // Flush saves and commits, but never hang the quit.
-            let flush = Task { await WindowManager.shared.closeAll() }
-            let timeout = Task { try? await Task.sleep(for: .seconds(8)) }
-            await withTaskGroup(of: Void.self) { group in
-                group.addTask { await flush.value }
-                group.addTask { await timeout.value }
-                await group.next()
-                group.cancelAll()
-            }
+        // Reply as soon as saves and commits finish, or after a cap so a stuck git never blocks quitting.
+        // (A task group would wait for the timer child too, delaying every quit by the full cap.)
+        var replied = false
+        let reply = {
+            guard !replied else { return }
+            replied = true
             NSApp.reply(toApplicationShouldTerminate: true)
+        }
+        Task {
+            await WindowManager.shared.closeAll()
+            reply()
+        }
+        DispatchQueue.main.asyncAfter(deadline: .now() + 8) {
+            MainActor.assumeIsolated { reply() }
         }
         return .terminateLater
     }

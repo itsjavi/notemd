@@ -11,6 +11,7 @@ struct MarkdownEditor: NSViewRepresentable {
     var isMarkdown = true
     var isEditable = true
     var font: NSFont
+    var indentation = Indentation(usesTabs: false, width: 4)
     var readableWidth: CGFloat
     var spellChecking: Bool
     var focusOnAppear = false
@@ -105,11 +106,12 @@ struct MarkdownEditor: NSViewRepresentable {
         textView.isEditable = isEditable
         textView.isContinuousSpellCheckingEnabled = spellChecking && isMarkdown
         textView.readableWidth = readableWidth
-        let changed = coordinator.styledFont != font || textView.isMarkdown != isMarkdown
+        let changed = coordinator.styledFont != font || textView.isMarkdown != isMarkdown || textView.indentation != indentation
         textView.isMarkdown = isMarkdown
+        textView.indentation = indentation
         if changed {
             coordinator.styledFont = font
-            let highlighter = MarkdownHighlighter(baseFont: font, isMarkdown: isMarkdown)
+            let highlighter = MarkdownHighlighter(baseFont: font, isMarkdown: isMarkdown, tabWidth: indentation.width)
             textView.typingAttributes = highlighter.baseAttributes
             textView.font = font
         }
@@ -132,7 +134,7 @@ struct MarkdownEditor: NSViewRepresentable {
         func rehighlight() {
             guard let storage = textView?.textStorage, let font = styledFont else { return }
             isHighlighting = true
-            MarkdownHighlighter(baseFont: font, isMarkdown: parent.isMarkdown).highlight(storage)
+            MarkdownHighlighter(baseFont: font, isMarkdown: parent.isMarkdown, tabWidth: parent.indentation.width).highlight(storage)
             isHighlighting = false
         }
 

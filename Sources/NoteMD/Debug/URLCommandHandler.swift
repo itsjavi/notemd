@@ -43,6 +43,11 @@ enum DebugHooks {
             }
         case "ui/open-file":
             if let path = safePath(query["path"]) { windows.openFile(URL(fileURLWithPath: path)) }
+        case "ui/settings":
+            // Same path as the app menu's Settings… item.
+            if let item = NSApp.mainMenu?.items.first?.submenu?.items.first(where: { $0.keyEquivalent == "," }), let action = item.action {
+                NSApp.sendAction(action, to: item.target, from: item)
+            }
         case "ui/welcome":
             windows.showWelcome()
         case "ui/sidebar":
@@ -119,6 +124,24 @@ enum DebugHooks {
                 await store.loadDeletedFiles()
                 if let file = store.deletedFiles.first(where: { $0.path == path }) { await store.restoreDeleted(file) }
             }
+        case "ui/editor-command":
+            // Runs a text command in the first editor of the repository (or document) window.
+            let windowsToSearch: [NSWindow] = query["target"] == "document"
+                ? NSDocumentController.shared.documents.flatMap { $0.windowControllers.compactMap(\.window) }
+                : (store.flatMap { s in windows.controllers.first { $0.store === s }?.window }.map { [$0] } ?? [])
+            guard let textView = windowsToSearch.lazy.compactMap({ $0.contentView.flatMap(findTextView) }).first else { return }
+            switch query["select"] {
+            case "all": textView.setSelectedRange(NSRange(location: 0, length: (textView.string as NSString).length))
+            case "end": textView.setSelectedRange(NSRange(location: (textView.string as NSString).length, length: 0))
+            default: break
+            }
+            switch query["name"] {
+            case "tab": textView.insertTab(nil)
+            case "backtab": textView.insertBacktab(nil)
+            case "newline": textView.insertNewline(nil)
+            case "text": textView.insertText(query["text"] ?? "", replacementRange: textView.selectedRange())
+            default: break
+            }
         case "ui/commit-now":
             if let store { Task { await store.saveVersionNow() } }
         case "ui/window-size":
@@ -134,6 +157,14 @@ enum DebugHooks {
         default:
             break
         }
+    }
+
+    private static func findTextView(in view: NSView) -> MarkdownTextView? {
+        if let textView = view as? MarkdownTextView { return textView }
+        for subview in view.subviews {
+            if let found = findTextView(in: subview) { return found }
+        }
+        return nil
     }
 
     /// Only temp locations, after resolving symlinks, so a link can't touch user files.

@@ -35,6 +35,15 @@ enum EditorFontStyle: String, CaseIterable, Identifiable {
     }
 }
 
+/// What the Tab key inserts in the editor.
+struct Indentation: Equatable {
+    var usesTabs: Bool
+    var width: Int
+
+    /// The text one indent level adds.
+    var unit: String { usesTabs ? "\t" : String(repeating: " ", count: width) }
+}
+
 enum NoteSortOrder: String, CaseIterable, Identifiable {
     case modified, created, title
     var id: String { rawValue }
@@ -60,6 +69,10 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
     var editorFontSize: Double { didSet { defaults.set(editorFontSize, forKey: Keys.editorFontSize) } }
     var readableLineWidth: Bool { didSet { defaults.set(readableLineWidth, forKey: Keys.readableLineWidth) } }
     var spellChecking: Bool { didSet { defaults.set(spellChecking, forKey: Keys.spellChecking) } }
+    /// Tab key inserts a tab character instead of spaces.
+    var indentWithTabs: Bool { didSet { defaults.set(indentWithTabs, forKey: Keys.indentWithTabs) } }
+    /// Spaces per indent level, and the display width of tab characters.
+    var indentWidth: Int { didSet { defaults.set(indentWidth, forKey: Keys.indentWidth) } }
     var showFrontMatter: Bool { didSet { defaults.set(showFrontMatter, forKey: Keys.showFrontMatter) } }
     var editorMode: EditorMode { didSet { defaults.set(editorMode.rawValue, forKey: Keys.editorMode) } }
     var sortOrder: NoteSortOrder { didSet { defaults.set(sortOrder.rawValue, forKey: Keys.sortOrder) } }
@@ -77,6 +90,8 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
         static let editorFontSize = "editorFontSize"
         static let readableLineWidth = "readableLineWidth"
         static let spellChecking = "spellChecking"
+        static let indentWithTabs = "indentWithTabs"
+        static let indentWidth = "indentWidth"
         static let showFrontMatter = "showFrontMatter"
         static let editorMode = "editorMode"
         static let sortOrder = "sortOrder"
@@ -93,6 +108,8 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
             Keys.editorFontSize: 15.0,
             Keys.readableLineWidth: true,
             Keys.spellChecking: true,
+            Keys.indentWithTabs: false,
+            Keys.indentWidth: 4,
             Keys.showFrontMatter: false,
             Keys.editorMode: EditorMode.edit.rawValue,
             Keys.sortOrder: NoteSortOrder.modified.rawValue,
@@ -104,6 +121,8 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
         editorFontSize = defaults.double(forKey: Keys.editorFontSize)
         readableLineWidth = defaults.bool(forKey: Keys.readableLineWidth)
         spellChecking = defaults.bool(forKey: Keys.spellChecking)
+        indentWithTabs = defaults.bool(forKey: Keys.indentWithTabs)
+        indentWidth = min(max(defaults.integer(forKey: Keys.indentWidth), 1), 8)
         showFrontMatter = defaults.bool(forKey: Keys.showFrontMatter)
         editorMode = EditorMode(rawValue: defaults.string(forKey: Keys.editorMode) ?? "") ?? .edit
         sortOrder = NoteSortOrder(rawValue: defaults.string(forKey: Keys.sortOrder) ?? "") ?? .modified
@@ -112,6 +131,8 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
         recentRepositories = defaults.stringArray(forKey: Keys.recentRepositories) ?? []
         openRepositories = defaults.stringArray(forKey: Keys.openRepositories) ?? []
     }
+
+    var indentation: Indentation { Indentation(usesTabs: indentWithTabs, width: indentWidth) }
 
     func noteRecentRepository(_ url: URL) {
         let path = PathDisplay.abbreviate(url)

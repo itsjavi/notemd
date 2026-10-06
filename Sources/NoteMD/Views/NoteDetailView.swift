@@ -56,6 +56,7 @@ struct NoteEditorPane: View {
             text: editor.editorText,
             revision: editor.externalRevision,
             font: settings.editorFont(),
+            indentation: settings.indentation,
             readableWidth: settings.readableLineWidth && settings.editorMode != .split ? 740 : 0,
             spellChecking: settings.spellChecking,
             focusOnAppear: consumeFocus(),

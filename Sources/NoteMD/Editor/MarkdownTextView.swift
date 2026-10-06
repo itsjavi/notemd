@@ -3,6 +3,7 @@ import AppKit
 /// NSTextView with Markdown editing conveniences: list continuation, list indentation and formatting commands.
 final class MarkdownTextView: NSTextView {
     var isMarkdown = true
+    var indentation = Indentation(usesTabs: false, width: 4)
     /// Maximum text width for comfortable reading; 0 = fill the view.
     var readableWidth: CGFloat = 0 {
         didSet { updateInsets() }
@@ -26,8 +27,17 @@ final class MarkdownTextView: NSTextView {
     private static let quotePattern = try! NSRegularExpression(pattern: #"^([ \t]*>[ \t]?)+"#)
 
     override func insertNewline(_ sender: Any?) {
-        guard isMarkdown, selectedRanges.count == 1, let range = selectedRanges.first?.rangeValue else {
+        guard selectedRanges.count == 1, let range = selectedRanges.first?.rangeValue else {
             super.insertNewline(sender)
+            return
+        }
+        guard isMarkdown else {
+            // Code and text files keep the current line's indentation.
+            let ns = string as NSString
+            let lineStart = ns.lineRange(for: NSRange(location: range.location, length: 0)).location
+            let before = ns.substring(with: NSRange(location: lineStart, length: range.location - lineStart))
+            let indent = before.prefix { $0 == " " || $0 == "\t" }
+            insertText("\n" + indent, replacementRange: range)
             return
         }
         let ns = string as NSString
@@ -75,24 +85,32 @@ final class MarkdownTextView: NSTextView {
     }
 
     override func insertTab(_ sender: Any?) {
-        guard isMarkdown, selectedLinesAreListItems() else {
-            super.insertTab(sender)
+        let selection = selectedRange()
+        let ns = string as NSString
+        let spansLines = selection.length > 0 && ns.substring(with: selection).contains(where: \.isNewline)
+        if spansLines || (isMarkdown && selectedLinesAreListItems()) {
+            let unit = indentation.unit
+            transformSelectedLines { $0.isEmpty ? $0 : unit + $0 }
             return
         }
-        transformSelectedLines { "    " + $0 }
+        if indentation.usesTabs {
+            insertText("\t", replacementRange: selection)
+            return
+        }
+        // Spaces up to the next indent stop, counting tabs at their display width.
+        let lineStart = ns.lineRange(for: NSRange(location: selection.location, length: 0)).location
+        let before = ns.substring(with: NSRange(location: lineStart, length: selection.location - lineStart))
+        let width = max(indentation.width, 1)
+        let column = before.reduce(0) { column, character in character == "\t" ? column + width - column % width : column + 1 }
+        insertText(String(repeating: " ", count: width - column % width), replacementRange: selection)
     }
 
     override func insertBacktab(_ sender: Any?) {
-        guard isMarkdown else {
-            super.insertBacktab(sender)
-            return
-        }
+        let width = max(indentation.width, 1)
         transformSelectedLines { line in
-            var line = line
-            var removed = 0
-            while removed < 4, line.first == " " { line.removeFirst(); removed += 1 }
-            if removed == 0, line.first == "\t" { line.removeFirst() }
-            return line
+            if line.first == "\t" { return String(line.dropFirst()) }
+            let spaces = line.prefix { $0 == " " }.count
+            return String(line.dropFirst(min(spaces, width)))
         }
     }
 
