@@ -143,13 +143,3 @@ def click():
     body = fx.bandpass(synth.noise(n, 77), 1800, 2.0) * _env(n, 0.0003, 0.012)
     low = synth.sine(STYLE.hz(240), n) * _env(n, 0.0005, 0.02) * 0.5
     return STYLE.finish(_place(0.035, [(0.0, body + low, 0.0)]))
-
-
-@sfx("scribble", -21, notes="A pen strikes a word through: grainy noise with a fast stroke rhythm.")
-def scribble():
-    dur = 0.42
-    n = samples(dur)
-    grain = fx.bandpass(synth.noise(n, 91, "pink"), STYLE.cutoff(2200), 0.8)
-    strokes = 0.55 + 0.45 * np.sin(2 * np.pi * 9.0 * np.arange(n) / SR) ** 2
-    shape = np.minimum(1.0, np.arange(n) / samples(0.03)) * _env(n, 0.001, dur * 1.6)
-    return STYLE.finish(pan(grain * strokes * shape, np.linspace(-0.3, 0.3, n)))

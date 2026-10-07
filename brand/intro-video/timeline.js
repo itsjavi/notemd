@@ -101,7 +101,7 @@ tl.to("#headline", { opacity: 0, y: -70, duration: 0.5, ease: "power2.in" }, 9.0
   tl.to("#revealShot", { opacity: 0, x: -260, duration: 0.42, ease: "power2.in" }, end - 0.45);
 }
 
-// ---------------------------------------------------------------- features (bars 6-13)
+// ---------------------------------------------------------------- features (bars 6-11)
 
 /** Shared feature layout: caption on the left, screenshot sliding in from the right, a slow zoom to `focus`. */
 function feature(id, start, { focus, zoom, zoomAt, zoomDur }) {
@@ -149,7 +149,7 @@ function feature(id, start, { focus, zoom, zoomAt, zoomDur }) {
 
 // Templates: type the prompt, fill the form, the placeholder becomes the value.
 {
-  const start = 8 * BAR;
+  const start = 10 * BAR;
   feature("templates", start, { focus: "62% 30%", zoom: 1.25, zoomAt: start + 2.4, zoomDur: 1.9 });
   const prefixEnd = typer($("codePrefix"), "# Code review: ", start + 0.55, 0.045, -5);
   const slotEnd = typer($("placeholder"), "{{project}}", prefixEnd + 0.02, 0.045, -5);
@@ -163,7 +163,7 @@ function feature(id, start, { focus, zoom, zoomAt, zoomDur }) {
 
 // Voice notes: record, then transcribe on-device.
 {
-  const start = 10 * BAR;
+  const start = 8 * BAR;
   const end = feature("voice", start, {
     focus: "68% 30%",
     zoom: 1.32,
@@ -209,58 +209,90 @@ function feature(id, start, { focus, zoom, zoomAt, zoomDur }) {
   });
 }
 
-// Video reviews: press play, the progress bar walks through the time-stamped notes.
+// ---------------------------------------------------------------- how templates work (bars 12-14)
+
+// Three steps left to right: the template source, the form it generates, the prompt you copy.
 {
   const start = 12 * BAR;
-  feature("review", start, { focus: "70% 62%", zoom: 1.12, zoomAt: start + 0.2, zoomDur: 4.0 });
-  const pressAt = start + 0.95;
-  const playFrom = start + 1.1;
-  const clip = 2.4; // the 0:24 clip, played back in 2.4 s
-  gsap.set("#press", { opacity: 0 });
+  const end = 15 * BAR;
+  enter("#explainerCaption .eyebrow", start, { y: 30 });
+  enter("#explainerCaption .title", start + 0.1, { y: 30 });
+  cue(start, "whoosh", -3);
+
+  // 1. The template appears line by line.
+  enter("#step1", start + 0.3);
   tl.fromTo(
-    "#press",
-    { opacity: 0.9, scale: 0.6 },
-    { opacity: 0, scale: 1.6, duration: 0.6, ease: "power2.out", immediateRender: false },
-    pressAt,
+    "#step1 .code-line",
+    { opacity: 0, x: -14 },
+    { opacity: 1, x: 0, duration: 0.25, stagger: 0.09 },
+    start + 0.55,
   );
-  cue(pressAt, "click");
-  enter("#timecode", pressAt, { y: 0 }, { duration: 0.2 });
-  tl.fromTo("#progressFill", { scaleX: 0 }, { scaleX: 1, duration: clip, ease: "none" }, playFrom);
-  dynamics.push((t) => {
-    const secs = Math.max(0, Math.min(24, Math.floor(((t - playFrom) / clip) * 24)));
-    $("timecode").textContent = `0:${String(secs).padStart(2, "0")}`;
-  });
-  [4, 12, 21].forEach((secs, i) => {
-    const at = playFrom + (secs / 24) * clip;
-    if (i === 0) enter("#bullet", at, {}, { duration: 0.2 });
-    else
-      tl.to(
-        "#bullet",
-        { top: `${[79.6, 83.1, 86.5][i]}%`, duration: 0.25, ease: "power2.inOut" },
-        at,
-      );
-    cue(at, "tick");
-  });
-}
+  document
+    .querySelectorAll("#step1 .code-line")
+    .forEach((_, i) => cue(start + 0.55 + i * 0.09, "key", -6));
 
-// ---------------------------------------------------------------- goodbye, TextEdit (bar 14)
-
-{
-  const start = 14 * BAR;
-  enter("#bye1", start + 0.05, { y: 50 });
-  enter("#bye2", start + 0.3, { y: 50 });
+  // 2. The form: pick a language, type the files, flip the toggle.
   tl.fromTo(
-    "#strike",
+    "#arrow1",
     { scaleX: 0 },
-    { scaleX: 1, duration: 0.35, ease: "power2.inOut" },
-    start + 0.9,
+    { scaleX: 1, duration: 0.3, ease: "power2.out" },
+    start + 1.95,
   );
-  cue(start + 0.9, "scribble");
-  enter("#byeSub", start + 1.35, { y: 24 });
+  enter("#step2", start + 2.05);
+  cue(start + 2.05, "pop", -3);
+  const languageAt = start + 2.5;
+  tl.fromTo(
+    "#formLanguage",
+    { scale: 1.1 },
+    { scale: 1, duration: 0.3, immediateRender: false },
+    languageAt,
+  );
+  cue(languageAt, "tick");
+  const filesStart = start + 2.75;
+  const filesEnd = typer(
+    $("formFiles"),
+    "Sources/Editor.swift\nSources/Preview.swift",
+    filesStart,
+    0.028,
+    -8,
+  );
+  caret($("caret4"), filesStart - 0.1, filesEnd + 0.15, [[filesStart, filesEnd]]);
+  const toggleAt = start + 4.1;
+  tl.to("#formKnob", { x: 32, duration: 0.25, ease: "power2.inOut" }, toggleAt);
+  tl.to("#formSwitch", { backgroundColor: "#2c9a93", duration: 0.25, ease: "none" }, toggleAt);
+  cue(toggleAt, "tick");
+
+  // 3. The prompt fills in with the values, then gets copied.
+  tl.fromTo(
+    "#arrow2",
+    { scaleX: 0 },
+    { scaleX: 1, duration: 0.3, ease: "power2.out" },
+    start + 4.3,
+  );
+  enter("#step3", start + 4.4);
+  cue(start + 4.4, "pop", -3);
+  ["#out1", "#out2", "#out3", "#out4"].forEach((line, i) => {
+    enter(line, start + 4.7 + i * 0.25, { x: -14, y: 0 }, { duration: 0.3 });
+    cue(start + 4.7 + i * 0.25, "tick");
+  });
+  const copyAt = start + 5.95;
+  tl.to("#copyButton", { scale: 0.92, duration: 0.08, ease: "power1.in" }, copyAt);
+  tl.to("#copyButton", { scale: 1, duration: 0.3, ease: "back.out(3)" }, copyAt + 0.08);
+  tl.to("#copyButton", { backgroundColor: "#3fb950", duration: 0.2, ease: "none" }, copyAt + 0.05);
+  cue(copyAt, "click");
+  cue(copyAt + 0.05, "sparkle", -2);
+
+  dynamics.push((t) => {
+    const picked = t >= languageAt;
+    $("formLanguageValue").textContent = picked ? "Swift" : "Choose…";
+    $("formLanguage").style.color = picked ? "var(--text)" : "var(--muted)";
+    $("copyLabel").textContent = t >= copyAt + 0.05 ? "Copied ✓" : "Copy";
+  });
+
   tl.to(
-    "#goodbye",
-    { opacity: 0, scale: 0.96, duration: 0.4, ease: "power2.in" },
-    start + BAR - 0.45,
+    ["#explainerCaption", "#explainer .steps"],
+    { opacity: 0, y: -30, duration: 0.42, ease: "power2.in" },
+    end - 0.45,
   );
 }
 

@@ -5,8 +5,8 @@ One bar is 2.4 s, so every scene of the animation starts on a bar line (see ../t
   bars 0-1   logo         pad swell and held keys (IV -> V)
   bars 2-3   headline     keys comping, round bass, shaker and rim
   bars 4-11  features     full groove, mallet motif (bars 4-7), variation with arpeggio (bars 8-11)
-  bars 12-13 video review counter-melody on bells, open hats
-  bar 14     goodbye      breakdown: drums out, riser into the resolution
+  bars 12-13 templates    how templates work: counter-melody on bells, open hats
+  bar 14     templates    the prompt appears in the breakdown: drums out, riser into the resolution
   bars 15-16 outro        tonic sting (crash, bell arpeggio), held chord
 """
 
@@ -97,7 +97,7 @@ def compose() -> Song:
     for bar in (4, 8):
         s.chords(bar, "Dmaj9 | Bm9 | Gmaj9 | Asus4:8 A:8 |")
     s.chords(12, "Dmaj9 | Bm9 | Gmaj9:8 Asus4:4 A:4 | Dmaj9 | Dmaj9 |")
-    for name, bar in (("logo", 0), ("headline", 2), ("features", 4), ("variation", 8), ("review", 12),
+    for name, bar in (("logo", 0), ("headline", 2), ("features", 4), ("variation", 8), ("explainer", 12),
                       ("breakdown", 14), ("outro", 15)):
         s.section(name, bar)
 

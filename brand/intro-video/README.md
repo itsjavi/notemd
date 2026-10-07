@@ -22,7 +22,7 @@ soundfile for the audio scripts on first run).
 | `timeline.js`         | The GSAP timeline, per-frame dynamics (typing, waveform, counters) and the SFX cue list.               |
 | `render.mjs`          | Seeks the page frame by frame in headless Chrome, encodes with ffmpeg, renders the audio, muxes.       |
 | `audio/score.py`      | The score: 100 BPM, D major, one scene per bar line (a bar is 2.4 s).                                  |
-| `audio/sfx.py`        | Sound effect recipes (chime, pop, key taps, whoosh, ticks, sparkle, record, click, scribble).          |
+| `audio/sfx.py`        | Sound effect recipes (chime, pop, key taps, whoosh, ticks, sparkle, record, click).                    |
 | `audio/style.py`      | The sonic identity every SFX reads from: key, sources, brightness, room.                               |
 | `audio/soundtrack.py` | Renders the score, places every cue from `build/cues.json`, masters to -16 LUFS.                       |
 

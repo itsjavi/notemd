@@ -72,7 +72,7 @@
         </div>
       </div>
 
-      <!-- Templates (bars 8-9) -->
+      <!-- Templates (bars 10-11) -->
       <div class="scene feature" id="templates">
         <div class="caption caption-side">
           <div class="eyebrow"><span>##</span> Templates</div>
@@ -95,7 +95,7 @@
         </div>
       </div>
 
-      <!-- Voice notes (bars 10-11) -->
+      <!-- Voice notes (bars 8-9) -->
       <div class="scene feature" id="voice">
         <div class="caption caption-side">
           <div class="eyebrow"><span>##</span> Voice notes</div>
@@ -122,36 +122,78 @@
         </div>
       </div>
 
-      <!-- Video reviews (bars 12-13) -->
-      <div class="scene feature" id="review">
-        <div class="caption caption-side">
-          <div class="eyebrow"><span>##</span> Video reviews</div>
-          <div class="title">Drop in a recording.<br />Review it in place.</div>
-          <div class="sub">Images, audio and video live in the vault, stored with Git LFS.</div>
+      <!-- How templates work (bars 12-14) -->
+      <div class="scene" id="explainer">
+        <div class="caption caption-center" id="explainerCaption">
+          <div class="eyebrow"><span>##</span> How templates work</div>
+          <div class="title">Write it once. Fill it in. Copy the prompt.</div>
         </div>
-        <div class="shot shot-side" id="reviewShot">
-          <img src="../../web/assets/video-review.webp" alt="" />
-          <div class="press" id="press" style="left: 71.5%; top: 48.8%"></div>
-          <div class="progress" style="left: 45.3%; top: 73.6%; width: 52.1%">
-            <div class="progress-fill" id="progressFill"></div>
+        <div class="steps">
+          <div class="step" id="step1">
+            <div class="step-label"><span class="step-number">1</span> Write a template</div>
+            <div class="step-card code">
+              <div class="code-line"><span class="fm">---</span></div>
+              <div class="code-line"><span class="key">params:</span></div>
+              <div class="code-line">&nbsp;&nbsp;- <span class="key">name:</span> language</div>
+              <div class="code-line">
+                &nbsp;&nbsp;&nbsp;&nbsp;<span class="key">type:</span> choice
+              </div>
+              <div class="code-line">&nbsp;&nbsp;- <span class="key">name:</span> files</div>
+              <div class="code-line">
+                &nbsp;&nbsp;&nbsp;&nbsp;<span class="key">type:</span> list
+              </div>
+              <div class="code-line">&nbsp;&nbsp;- <span class="key">name:</span> strict</div>
+              <div class="code-line">
+                &nbsp;&nbsp;&nbsp;&nbsp;<span class="key">type:</span> toggle
+              </div>
+              <div class="code-line"><span class="fm">---</span></div>
+              <div class="code-line">
+                Review these <span class="ph">{{language}}</span> changes:
+              </div>
+              <div class="code-line"><span class="ph">{{#each files}}</span></div>
+              <div class="code-line">- <span class="ph">{{.}}</span></div>
+              <div class="code-line"><span class="ph">{{/each}}</span></div>
+              <div class="code-line">
+                <span class="ph">{{#if strict}}</span>Be strict.<span class="ph">{{/if}}</span>
+              </div>
+            </div>
           </div>
-          <div class="timecode" id="timecode" style="left: 46.6%; top: 66.6%">0:00</div>
-          <div
-            class="row-highlight"
-            id="bullet"
-            style="left: 45.6%; top: 79.6%; width: 31.4%; height: 3.6%"
-          ></div>
-        </div>
-      </div>
-
-      <!-- Goodbye, TextEdit (bar 14) -->
-      <div class="goodbye" id="goodbye">
-        <div class="goodbye-line" id="bye1">Goodbye,</div>
-        <div class="goodbye-line muted" id="bye2">
-          TextEdit.<span class="strike" id="strike"></span>
-        </div>
-        <div class="goodbye-sub" id="byeSub">
-          Open any text file with NoteMD, whatever the extension.
+          <div class="arrow" id="arrow1"></div>
+          <div class="step" id="step2">
+            <div class="step-label"><span class="step-number">2</span> Fill in the form</div>
+            <div class="step-card form">
+              <div class="field">
+                <span class="field-label">Language</span>
+                <span class="select" id="formLanguage"
+                  ><span id="formLanguageValue">Choose…</span> ⌄</span
+                >
+              </div>
+              <div class="field field-stacked">
+                <span class="field-label">Files</span>
+                <div class="textarea">
+                  <span id="formFiles"></span><span class="caret caret-small" id="caret4"></span>
+                </div>
+                <span class="field-help">One item per line</span>
+              </div>
+              <div class="field">
+                <span class="field-label">Be strict</span>
+                <span class="switch" id="formSwitch"><span class="knob" id="formKnob"></span></span>
+              </div>
+            </div>
+          </div>
+          <div class="arrow" id="arrow2"></div>
+          <div class="step" id="step3">
+            <div class="step-label"><span class="step-number">3</span> Copy the prompt</div>
+            <div class="step-card result">
+              <div class="result-text">
+                <div class="result-line" id="out1">Review these <mark>Swift</mark> changes:</div>
+                <div class="result-line" id="out2">- <mark>Sources/Editor.swift</mark></div>
+                <div class="result-line" id="out3">- <mark>Sources/Preview.swift</mark></div>
+                <div class="result-line" id="out4"><mark>Be strict.</mark></div>
+              </div>
+              <span class="copy-button" id="copyButton"><span id="copyLabel">Copy</span></span>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -162,7 +204,7 @@
         <div class="outro-tagline" id="outroTagline">Markdown notes, versioned automatically.</div>
         <div class="outro-meta" id="outroMeta">
           <span class="pill">Free &amp; open source · macOS 26</span>
-          <span class="url">itsjavi.github.io/notemd</span>
+          <span class="url">itsjavi.com/notemd</span>
         </div>
       </div>
 

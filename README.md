@@ -10,7 +10,7 @@
 </p>
 
 <p align="center">
-  <a href="https://itsjavi.github.io/notemd/">Website</a> ·
+  <a href="https://itsjavi.com/notemd/">Website</a> ·
   <a href="#features">Features</a> ·
   <a href="#building">Building</a> ·
   <a href="LICENSE">MIT License</a>
@@ -22,7 +22,7 @@
 </picture>
 
 <p align="center">
-  <a href="https://itsjavi.github.io/notemd/#video"><strong>▶ Watch the 42-second intro</strong></a>
+  <a href="https://itsjavi.com/notemd/#video"><strong>▶ Watch the 42-second intro</strong></a>
 </p>
 
 ## Why NoteMD
