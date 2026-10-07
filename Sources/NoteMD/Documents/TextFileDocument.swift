@@ -51,6 +51,14 @@ final class TextFileDocument: NSDocument {
     }
 
     private nonisolated static func decode(_ data: Data) throws -> (String, String.Encoding, Bool) {
+        // Any file type can be opened, so refuse binary content (NUL bytes) unless it's UTF-16/32 text with a BOM.
+        let hasByteOrderMark = data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF])
+        if !hasByteOrderMark && data.prefix(8192).contains(0) {
+            throw NSError(domain: NSCocoaErrorDomain, code: CocoaError.fileReadCorruptFile.rawValue, userInfo: [
+                NSLocalizedDescriptionKey: "This file isn't text.",
+                NSLocalizedRecoverySuggestionErrorKey: "NoteMD opens Markdown and other text files.",
+            ])
+        }
         if let utf8 = String(data: data, encoding: .utf8) { return (utf8, .utf8, false) }
         var converted: NSString?
         var usedLossy: ObjCBool = false

@@ -87,6 +87,21 @@
 			<string>TextFileDocument</string>
 		</dict>
 		<dict>
+			<!-- Unknown extensions (.env.example, Makefile…) get dynamic types; binary content is refused on read. -->
+			<key>CFBundleTypeName</key>
+			<string>Other File</string>
+			<key>CFBundleTypeRole</key>
+			<string>Editor</string>
+			<key>LSHandlerRank</key>
+			<string>Alternate</string>
+			<key>LSItemContentTypes</key>
+			<array>
+				<string>public.data</string>
+			</array>
+			<key>NSDocumentClass</key>
+			<string>TextFileDocument</string>
+		</dict>
+		<dict>
 			<key>CFBundleTypeName</key>
 			<string>Notes Folder</string>
 			<key>CFBundleTypeRole</key>

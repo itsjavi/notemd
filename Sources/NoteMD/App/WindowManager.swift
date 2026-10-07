@@ -20,6 +20,7 @@ import SwiftUI
                 guard let self, let windowID else { return }
                 if let controller = self.controllers.first(where: { $0.window.map(ObjectIdentifier.init) == windowID }) {
                     self.activeStore = controller.store
+                    AppSettings.shared.noteRecentRepository(controller.store.rootURL)
                 }
             }
         }
@@ -157,10 +158,15 @@ import SwiftUI
         AppSettings.shared.openRepositories = controllers.map { PathDisplay.abbreviate($0.store.rootURL) }
     }
 
-    func restoreOpenRepositories() {
-        for path in AppSettings.shared.openRepositories {
-            let url = PathDisplay.expand(path)
-            if FileManager.default.fileExists(atPath: url.path) { openRepository(url) }
+    /// Reopens the repositories open at quit, or else the most recently used one that still exists.
+    func restoreRepositories() {
+        let settings = AppSettings.shared
+        for url in settings.openRepositories.map(PathDisplay.expand) where FileManager.default.fileExists(atPath: url.path) {
+            openRepository(url)
+        }
+        guard controllers.isEmpty else { return }
+        if let recent = settings.recentRepositories.map(PathDisplay.expand).first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
+            openRepository(recent)
         }
     }
 

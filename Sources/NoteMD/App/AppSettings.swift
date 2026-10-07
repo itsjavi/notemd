@@ -136,6 +136,7 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
 
     func noteRecentRepository(_ url: URL) {
         let path = PathDisplay.abbreviate(url)
+        guard recentRepositories.first != path else { return }
         recentRepositories = Array(([path] + recentRepositories.filter { $0 != path }).prefix(12))
     }
 
