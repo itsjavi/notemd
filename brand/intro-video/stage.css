@@ -1,0 +1,494 @@
+/* 1920x1080 stage. Colors follow the website's dark palette (web/styles.css). Every animated property is set by
+   timeline.js through a paused GSAP timeline, so frames render deterministically: no CSS transitions here. */
+
+:root {
+  --bg: #0d1517;
+  --surface: #152226;
+  --line: #24363b;
+  --text: #e8eeed;
+  --muted: #a0afad;
+  --brand: #2c9a93;
+  --accent: #f2a14a;
+  --green: #3fb950;
+  --red: #ff5f57;
+  --font: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+  --mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+html,
+body {
+  margin: 0;
+  background: #000;
+}
+
+#stage {
+  position: relative;
+  width: 1920px;
+  height: 1080px;
+  overflow: hidden;
+  background: var(--bg);
+  color: var(--text);
+  font-family: var(--font);
+  -webkit-font-smoothing: antialiased;
+}
+
+.glow {
+  position: absolute;
+  border-radius: 50%;
+  pointer-events: none;
+  filter: blur(40px);
+}
+
+.glow-top {
+  left: 360px;
+  top: -520px;
+  width: 1200px;
+  height: 900px;
+  background: radial-gradient(closest-side, rgb(44 154 147 / 0.28), transparent);
+}
+
+.glow-bottom {
+  left: 160px;
+  top: 640px;
+  width: 1600px;
+  height: 900px;
+  background: radial-gradient(closest-side, rgb(44 154 147 / 0.2), transparent);
+}
+
+.blackout {
+  position: absolute;
+  inset: 0;
+  background: #000;
+  pointer-events: none;
+}
+
+/* Logo */
+
+.brand {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 36px;
+}
+
+.brand-icon {
+  width: 260px;
+  height: 260px;
+  filter: drop-shadow(0 30px 50px rgb(0 0 0 / 0.55));
+}
+
+.brand-name {
+  font-size: 84px;
+  font-weight: 700;
+  letter-spacing: -0.03em;
+}
+
+/* Headline */
+
+.headline {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 132px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.08;
+}
+
+.line {
+  position: relative;
+  white-space: nowrap;
+}
+
+.ghost {
+  visibility: hidden;
+}
+
+.typed {
+  position: absolute;
+  left: 0;
+  top: 0;
+}
+
+.caret {
+  display: inline-block;
+  width: 9px;
+  height: 0.82em;
+  margin-left: 8px;
+  vertical-align: -0.06em;
+  border-radius: 3px;
+  background: var(--brand);
+}
+
+.status {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  margin-top: 56px;
+  padding: 12px 26px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+  font-size: 30px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+.dot {
+  width: 16px;
+  height: 16px;
+  border-radius: 50%;
+  background: var(--green);
+  box-shadow: 0 0 0 6px rgb(63 185 80 / 0.18);
+}
+
+/* Scenes and captions */
+
+.scene {
+  position: absolute;
+  inset: 0;
+  perspective: 2400px;
+}
+
+.caption {
+  position: absolute;
+  z-index: 2;
+}
+
+.caption-center {
+  left: 0;
+  right: 0;
+  top: 64px;
+  text-align: center;
+}
+
+/* The scrim keeps captions readable when a screenshot zooms in behind them. */
+.caption-side {
+  left: 0;
+  top: 0;
+  bottom: 0;
+  width: 860px;
+  padding: 0 150px 0 110px;
+  background: linear-gradient(90deg, var(--bg) 0, var(--bg) 640px, rgb(13 21 23 / 0) 860px);
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+}
+
+.eyebrow {
+  font-family: var(--mono);
+  font-size: 28px;
+  font-weight: 600;
+  color: var(--muted);
+  margin-bottom: 18px;
+}
+
+.eyebrow span {
+  color: var(--accent);
+}
+
+.title {
+  font-size: 76px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+  line-height: 1.05;
+}
+
+.caption-center .title {
+  font-size: 64px;
+}
+
+.sub {
+  margin-top: 24px;
+  color: var(--muted);
+  font-size: 30px;
+  line-height: 1.4;
+  max-width: 540px;
+}
+
+.caption-center .sub {
+  max-width: none;
+  margin-top: 16px;
+  font-size: 30px;
+}
+
+.shot {
+  position: absolute;
+  transform-style: preserve-3d;
+}
+
+.shot img {
+  display: block;
+  width: 100%;
+  height: auto;
+  filter: drop-shadow(0 40px 70px rgb(0 0 0 / 0.55));
+}
+
+.shot-hero {
+  left: 240px;
+  top: 300px;
+  width: 1440px;
+}
+
+.shot-side {
+  left: 720px;
+  top: 185px;
+  width: 1130px;
+}
+
+/* Overlays positioned in percent of a screenshot */
+
+.ring {
+  position: absolute;
+  border: 4px solid var(--accent);
+  border-radius: 14px;
+  box-shadow:
+    0 0 0 8px rgb(242 161 74 / 0.2),
+    0 0 40px rgb(242 161 74 / 0.35);
+}
+
+.ring-green {
+  border-color: var(--green);
+  box-shadow:
+    0 0 0 8px rgb(63 185 80 / 0.18),
+    0 0 40px rgb(63 185 80 / 0.3);
+}
+
+.row-highlight {
+  position: absolute;
+  border-radius: 10px;
+  background: rgb(44 154 147 / 0.22);
+  box-shadow: inset 0 0 0 3px rgb(44 154 147 / 0.9);
+}
+
+.press {
+  position: absolute;
+  width: 120px;
+  height: 120px;
+  margin: -60px 0 0 -60px;
+  border-radius: 50%;
+  border: 4px solid #fff;
+}
+
+.progress {
+  position: absolute;
+  height: 8px;
+  border-radius: 4px;
+  background: rgb(255 255 255 / 0.25);
+  overflow: hidden;
+}
+
+.progress-fill {
+  height: 100%;
+  width: 100%;
+  background: var(--accent);
+  transform-origin: left center;
+}
+
+.timecode {
+  position: absolute;
+  padding: 4px 12px;
+  border-radius: 8px;
+  background: rgb(0 0 0 / 0.65);
+  color: #fff;
+  font-family: var(--mono);
+  font-size: 22px;
+}
+
+/* Templates code card */
+
+.code-card {
+  margin-top: 40px;
+  padding: 26px 30px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  background: #0a1113;
+  font-family: var(--mono);
+  font-size: 32px;
+  white-space: nowrap;
+}
+
+.code-muted {
+  color: var(--muted);
+  opacity: 0.6;
+}
+
+.slot {
+  position: relative;
+  display: inline-block;
+}
+
+.placeholder {
+  color: var(--accent);
+}
+
+.value {
+  position: absolute;
+  left: 0;
+  top: 0;
+  padding: 0 6px;
+  margin-left: -6px;
+  border-radius: 6px;
+  background: rgb(44 154 147 / 0.3);
+  color: #fff;
+  font-weight: 700;
+}
+
+/* Voice recorder card */
+
+.recorder {
+  position: absolute;
+  z-index: 3;
+  left: 560px;
+  top: 770px;
+  width: 520px;
+  padding: 24px 28px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgb(21 34 38 / 0.94);
+  box-shadow: 0 30px 60px rgb(0 0 0 / 0.5);
+}
+
+.recorder-head {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 28px;
+  font-weight: 600;
+}
+
+.rec-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  background: var(--red);
+}
+
+.rec-time {
+  margin-left: auto;
+  color: var(--muted);
+  font-family: var(--mono);
+  font-weight: 500;
+}
+
+.wave {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  height: 90px;
+  margin-top: 16px;
+}
+
+.wave span {
+  flex: 1;
+  height: 100%;
+  border-radius: 4px;
+  background: var(--brand);
+  transform-origin: center;
+}
+
+/* Goodbye, TextEdit */
+
+.goodbye {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  font-size: 150px;
+  font-weight: 700;
+  letter-spacing: -0.04em;
+  line-height: 1.05;
+}
+
+.goodbye-line {
+  position: relative;
+}
+
+.muted {
+  color: var(--muted);
+}
+
+.strike {
+  position: absolute;
+  left: -2%;
+  top: 54%;
+  width: 104%;
+  height: 14px;
+  border-radius: 7px;
+  background: var(--accent);
+  transform-origin: left center;
+}
+
+.goodbye-sub {
+  margin-top: 48px;
+  color: var(--muted);
+  font-size: 38px;
+  font-weight: 500;
+  letter-spacing: 0;
+}
+
+/* Outro */
+
+.outro {
+  position: absolute;
+  inset: 0;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+}
+
+.outro-icon {
+  width: 220px;
+  height: 220px;
+  filter: drop-shadow(0 30px 50px rgb(0 0 0 / 0.55));
+}
+
+.outro-name {
+  margin-top: 34px;
+  font-size: 96px;
+  font-weight: 700;
+  letter-spacing: -0.035em;
+}
+
+.outro-tagline {
+  margin-top: 10px;
+  color: var(--muted);
+  font-size: 44px;
+  font-weight: 500;
+  letter-spacing: -0.01em;
+}
+
+.outro-meta {
+  display: flex;
+  align-items: center;
+  gap: 28px;
+  margin-top: 48px;
+  font-size: 30px;
+}
+
+.pill {
+  padding: 10px 24px;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  background: var(--surface);
+  color: var(--muted);
+}
+
+.url {
+  font-family: var(--mono);
+  color: var(--accent);
+}

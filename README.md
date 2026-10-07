@@ -21,6 +21,10 @@
   <img src="web/assets/screenshot-light.webp" alt="The NoteMD window: colored folders and tags in the sidebar, the note list, and a note shown as Markdown source next to its rendered preview.">
 </picture>
 
+<p align="center">
+  <a href="https://itsjavi.github.io/notemd/#video"><strong>▶ Watch the 42-second intro</strong></a>
+</p>
+
 ## Why NoteMD
 
 I wanted a simpler note-taking app: plain Markdown files, several separate vaults, and every change versioned with git

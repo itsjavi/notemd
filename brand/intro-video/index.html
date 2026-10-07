@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>NoteMD intro</title>
+    <link rel="stylesheet" href="stage.css" />
+  </head>
+  <body>
+    <div id="stage">
+      <div class="glow glow-top"></div>
+      <div class="glow glow-bottom"></div>
+
+      <!-- Logo (bars 0-1) -->
+      <div class="brand" id="brand">
+        <img class="brand-icon" id="brandIcon" src="../../web/assets/icon.png" alt="" />
+        <div class="brand-name" id="brandName">NoteMD</div>
+      </div>
+
+      <!-- Headline (bars 2-3) -->
+      <div class="headline" id="headline">
+        <div class="line">
+          <span class="ghost">Markdown notes,</span>
+          <span class="typed"><span id="line1"></span><span class="caret" id="caret1"></span></span>
+        </div>
+        <div class="line">
+          <span class="ghost">versioned automatically.</span>
+          <span class="typed"><span id="line2"></span><span class="caret" id="caret2"></span></span>
+        </div>
+        <div class="status" id="status"><span class="dot"></span>All changes versioned</div>
+      </div>
+
+      <!-- App reveal (bars 4-5) -->
+      <div class="scene" id="reveal">
+        <div class="caption caption-center">
+          <div class="eyebrow"><span>##</span> Plain files</div>
+          <div class="title">Your notes are just Markdown files.</div>
+          <div class="sub" id="revealSub">
+            Folders, tags and search. As many vaults as you like.
+          </div>
+        </div>
+        <div class="shot shot-hero" id="revealShot">
+          <img src="../../web/assets/screenshot-dark.webp" alt="" />
+          <div
+            class="ring"
+            id="revealRing"
+            style="left: 0.6%; top: 20.4%; width: 15.8%; height: 14%"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Version history (bars 6-7) -->
+      <div class="scene feature" id="history">
+        <div class="caption caption-side">
+          <div class="eyebrow"><span>##</span> Versioned</div>
+          <div class="title">Every edit,<br />safely in git.</div>
+          <div class="sub">
+            Saved as you type, committed when you pause. Compare and restore any version.
+          </div>
+        </div>
+        <div class="shot shot-side" id="historyShot">
+          <img src="../../web/assets/version-history.webp" alt="" />
+          <div
+            class="row-highlight"
+            id="historyRow"
+            style="left: 13.3%; top: 26.2%; width: 28.1%; height: 5.6%"
+          ></div>
+          <div
+            class="ring ring-green"
+            id="historyRing"
+            style="left: 42.3%; top: 31.2%; width: 45.4%; height: 20.6%"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Templates (bars 8-9) -->
+      <div class="scene feature" id="templates">
+        <div class="caption caption-side">
+          <div class="eyebrow"><span>##</span> Templates</div>
+          <div class="title">Reusable prompts,<br />as forms.</div>
+          <div class="code-card" id="templateCode">
+            <span id="codePrefix"></span
+            ><span class="slot"
+              ><span class="placeholder" id="placeholder"></span
+              ><span class="value" id="value">NoteMD</span></span
+            ><span class="caret" id="caret3"></span>
+          </div>
+        </div>
+        <div class="shot shot-side" id="templatesShot">
+          <img src="../../web/assets/template-form.webp" alt="" />
+          <div
+            class="ring"
+            id="templatesRing"
+            style="left: 16.2%; top: 19.4%; width: 32.6%; height: 5%"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Voice notes (bars 10-11) -->
+      <div class="scene feature" id="voice">
+        <div class="caption caption-side">
+          <div class="eyebrow"><span>##</span> Voice notes</div>
+          <div class="title">Say it.<br />Read it.</div>
+          <div class="sub">
+            Record into a note and transcribe on-device. The audio never leaves your Mac.
+          </div>
+        </div>
+        <div class="shot shot-side" id="voiceShot">
+          <img src="../../web/assets/voice-note.webp" alt="" />
+          <div
+            class="ring"
+            id="voiceRing"
+            style="left: 44.8%; top: 30.6%; width: 50.2%; height: 4.8%"
+          ></div>
+        </div>
+        <div class="recorder" id="recorder">
+          <div class="recorder-head">
+            <span class="rec-dot" id="recDot"></span>
+            <span id="recLabel">Recording</span>
+            <span class="rec-time" id="recTime">0:00</span>
+          </div>
+          <div class="wave" id="wave"></div>
+        </div>
+      </div>
+
+      <!-- Video reviews (bars 12-13) -->
+      <div class="scene feature" id="review">
+        <div class="caption caption-side">
+          <div class="eyebrow"><span>##</span> Video reviews</div>
+          <div class="title">Drop in a recording.<br />Review it in place.</div>
+          <div class="sub">Images, audio and video live in the vault, stored with Git LFS.</div>
+        </div>
+        <div class="shot shot-side" id="reviewShot">
+          <img src="../../web/assets/video-review.webp" alt="" />
+          <div class="press" id="press" style="left: 71.5%; top: 48.8%"></div>
+          <div class="progress" style="left: 45.3%; top: 73.6%; width: 52.1%">
+            <div class="progress-fill" id="progressFill"></div>
+          </div>
+          <div class="timecode" id="timecode" style="left: 46.6%; top: 66.6%">0:00</div>
+          <div
+            class="row-highlight"
+            id="bullet"
+            style="left: 45.6%; top: 79.6%; width: 31.4%; height: 3.6%"
+          ></div>
+        </div>
+      </div>
+
+      <!-- Goodbye, TextEdit (bar 14) -->
+      <div class="goodbye" id="goodbye">
+        <div class="goodbye-line" id="bye1">Goodbye,</div>
+        <div class="goodbye-line muted" id="bye2">
+          TextEdit.<span class="strike" id="strike"></span>
+        </div>
+        <div class="goodbye-sub" id="byeSub">
+          Open any text file with NoteMD, whatever the extension.
+        </div>
+      </div>
+
+      <!-- Outro (bars 15-16) -->
+      <div class="outro" id="outro">
+        <img class="outro-icon" id="outroIcon" src="../../web/assets/icon.png" alt="" />
+        <div class="outro-name" id="outroName">NoteMD</div>
+        <div class="outro-tagline" id="outroTagline">Markdown notes, versioned automatically.</div>
+        <div class="outro-meta" id="outroMeta">
+          <span class="pill">Free &amp; open source · macOS 26</span>
+          <span class="url">itsjavi.github.io/notemd</span>
+        </div>
+      </div>
+
+      <div class="blackout" id="blackout"></div>
+    </div>
+
+    <script src="node_modules/gsap/dist/gsap.min.js"></script>
+    <script src="timeline.js"></script>
+  </body>
+</html>
