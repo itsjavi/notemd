@@ -86,6 +86,8 @@ Mark a task Done only when:
 - Relevant validation has passed, with limitations documented.
 - Its changes are integrated into the main working tree.
 - Any required visual evidence and completion summary are recorded.
+- User-facing features and substantial UI changes are reflected in the README, website and intro video (see
+  "Public docs, website and intro video"), or the task notes say why they are not needed.
 
 Writing workers update their own tasks through the CLI. Read-only
 workers return findings and proposed updates to the orchestrator,
@@ -211,19 +213,39 @@ Decisions live in `backlog/decisions/` (platform, storage format, git versioning
 
 ### Layout
 
-| Path                                                                                        | Contents                                                                                    |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------- |
-| `Sources/NoteMDCore/Notes`                                                                  | Front matter (Yams, raw-entry preserving), notes, folders + `.notemd.json`, scanner, search |
-| `Sources/NoteMDCore/Templates`                                                              | Template parameters and the `{{…}}` renderer                                                |
-| `Sources/NoteMDCore/Markdown`                                                               | cmark-gfm HTML rendering (GFM extensions, alerts, front matter table)                       |
-| `Sources/NoteMDCore/Git`, `Diff`                                                            | git subprocess client, auto-committer, commit messages, line diff                           |
-| `Sources/NoteMD/App`                                                                        | App entry, delegate, window manager, settings, variants                                     |
-| `Sources/NoteMD/Repository`                                                                 | Per-window `RepositoryStore`, open-note `NoteEditor`, FSEvents watcher                      |
-| `Sources/NoteMD/Views`, `Editor`, `Preview`, `Folders`, `Templates`, `History`, `Documents` | UI                                                                                          |
-| `Sources/NoteMD/Attachments`, `Voice`                                                       | Drop/paste importer (assets/ copy or link), voice recorder, on-device transcription         |
-| `Sources/NoteMD/Debug`                                                                      | URL scheme handler; DEBUG-only test hooks                                                   |
-| `Resources/`                                                                                | Info.plist, privacy manifest, `AppIcon.icon`                                                |
-| `scripts/`                                                                                  | `build-app.sh`, `make-icon.swift`, `window-screenshot.swift`                                |
+| Path                                                                                        | Contents                                                                                          |
+| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
+| `Sources/NoteMDCore/Notes`                                                                  | Front matter (Yams, raw-entry preserving), notes, folders + `.notemd.json`, scanner, search       |
+| `Sources/NoteMDCore/Templates`                                                              | Template parameters and the `{{…}}` renderer                                                      |
+| `Sources/NoteMDCore/Markdown`                                                               | cmark-gfm HTML rendering (GFM extensions, alerts, front matter table)                             |
+| `Sources/NoteMDCore/Git`, `Diff`                                                            | git subprocess client, auto-committer, commit messages, line diff                                 |
+| `Sources/NoteMD/App`                                                                        | App entry, delegate, window manager, settings, variants                                           |
+| `Sources/NoteMD/Repository`                                                                 | Per-window `RepositoryStore`, open-note `NoteEditor`, FSEvents watcher                            |
+| `Sources/NoteMD/Views`, `Editor`, `Preview`, `Folders`, `Templates`, `History`, `Documents` | UI                                                                                                |
+| `Sources/NoteMD/Attachments`, `Voice`                                                       | Drop/paste importer (assets/ copy or link), voice recorder, on-device transcription               |
+| `Sources/NoteMD/Debug`                                                                      | URL scheme handler; DEBUG-only test hooks                                                         |
+| `Resources/`                                                                                | Info.plist, privacy manifest, `AppIcon.icon`                                                      |
+| `scripts/`                                                                                  | `build-app.sh`, `make-icon.swift`, `window-screenshot.swift`, `demo-vault.sh`, `og-image.html`    |
+| `web/`, `.github/workflows/pages.yml`                                                       | Website (https://itsjavi.com/notemd/) and its GitHub Pages deployment                             |
+| `brand/`                                                                                    | Screenshot/social-card recipes (`brand/README.md`) and the generated intro video (`intro-video/`) |
+
+### Public docs, website and intro video
+
+The README, the website and the intro video are part of the product. Any task that adds a user-facing feature,
+removes or renames one, or substantially changes the UI must update them in the same task:
+
+- `README.md`: the feature list, and the screenshot table when it shows changed UI.
+- `web/index.html`: the feature rows or details grid, and the screenshots in `web/assets/` (shared with the README).
+- `brand/intro-video/`: add or fix a scene when the feature is headline-worthy or a scene becomes inaccurate, then
+  re-render (`pnpm render`). Re-render after screenshot changes, since scenes use them.
+- `scripts/og-image.html`: re-render the social card when the hero screenshot or tagline changes.
+
+Follow `brand/README.md` for what to update, the demo vault (`scripts/demo-vault.sh`) and the capture recipe. Never
+leave published copy, screenshots or video showing UI that no longer exists.
+
+When planning, the orchestrator adds this acceptance criterion to every feature or UI task: "README, website and
+intro video updated, or the notes say why not". Send the updated screenshots or video in chat like any other visual
+change.
 
 ### Builds
 
