@@ -94,6 +94,15 @@ struct NoteMDCommands: Commands {
             }
             .keyboardShortcut("r", modifiers: [.command, .option])
             .disabled(store?.editor == nil)
+            Divider()
+            Button("Record Voice Note") {
+                if let document = NSApp.keyWindow?.windowController?.document as? TextFileDocument {
+                    document.model.startVoiceNote()
+                } else {
+                    store?.startVoiceNote()
+                }
+            }
+            .keyboardShortcut("r", modifiers: [.command, .control])
         }
         CommandMenu("Format") {
             formatButton("Bold", #selector(MarkdownTextView.toggleBold(_:)), "b")

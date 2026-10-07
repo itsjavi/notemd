@@ -52,6 +52,8 @@ enum RepositorySheet: Identifiable {
     case history(path: String)
     case templateForm(path: String)
     case templateParameters(path: String)
+    /// Transcribe the clip `source` (link destination as written) embedded in the note at `path`.
+    case transcribe(path: String, source: String)
 
     var id: String {
         switch self {
@@ -60,6 +62,7 @@ enum RepositorySheet: Identifiable {
         case .history(let path): "history:" + path
         case .templateForm(let path): "form:" + path
         case .templateParameters(let path): "params:" + path
+        case .transcribe(let path, let source): "transcribe:" + path + ":" + source
         }
     }
 }
@@ -109,7 +112,12 @@ enum GitState: Equatable {
     var sheet: RepositorySheet?
     var errorMessage: String?
     private(set) var gitState: GitState = .starting
+    /// Attachments exist but Git LFS isn't installed, so they're kept out of commits.
+    private(set) var lfsMissing = false
+    let voiceRecorder = VoiceRecorder()
+    var showsVoiceRecorder = false
 
+    @ObservationIgnored private var lfsEnabled = false
     @ObservationIgnored private var notesByPath: [String: Note] = [:]
     @ObservationIgnored private var watcher: FileWatcher?
     @ObservationIgnored private(set) var git: GitClient?
@@ -140,6 +148,7 @@ enum GitState: Equatable {
 
     /// Saves the open note, applies an automatic name and commits everything pending.
     func close() async {
+        voiceRecorder.stop()
         if let editor {
             editor.save()
             finalizeName(of: editor.path)
@@ -199,18 +208,22 @@ enum GitState: Equatable {
 
     private func filesChanged(_ paths: [String]) {
         let rootPath = rootURL.path
-        let relevant = paths.contains { path in
-            guard path == rootPath || path.hasPrefix(rootPath + "/") else { return false }
-            let relative = String(path.dropFirst(rootPath.count))
-            if relative.contains("/.git/") || relative.hasSuffix("/.git") { return false }
+        let relevant = paths.compactMap { path -> String? in
+            guard path == rootPath || path.hasPrefix(rootPath + "/") else { return nil }
+            let relative = String(path.dropFirst(rootPath.count + 1))
             let components = relative.split(separator: "/")
-            // Hidden items don't matter, except folder appearance files.
-            return !components.contains { $0.hasPrefix(".") && $0 != Substring(FolderAppearance.fileName) }
+            // Hidden items don't matter, except folder appearance files (this also skips .git).
+            if components.contains(where: { $0.hasPrefix(".") && $0 != Substring(FolderAppearance.fileName) }) { return nil }
+            // A recording in progress changes constantly; it's handled when it ends.
+            return relative == recordingAsset ? nil : relative
         }
-        guard relevant else { return }
+        guard !relevant.isEmpty else { return }
         autoCommitter?.markDirty()
         updatePendingState()
-        Task { await reload() }
+        let isAsset = { (path: String) in path.split(separator: "/").first?.lowercased() == Attachments.folderName }
+        if relevant.contains(where: isAsset) { didAddAssets() }
+        // Attachments hold no notes: only other changes need a rescan.
+        if relevant.contains(where: { !isAsset($0) }) { Task { await reload() } }
     }
 
     /// Picks up external edits to the open note, or closes it when its file disappeared.
@@ -485,11 +498,12 @@ enum GitState: Equatable {
         let newPath = relativePath(of: target)
         notesByPath[note.path] = nil
         notes.removeAll { $0.path == note.path }
-        _ = scanSingle(newPath)
         if wasOpen {
             editor?.relocate(path: newPath, url: target)
             selectedNoteIDWithoutReopen(newPath)
         }
+        rewriteAssetLinks(ofNoteAt: newPath, movedFrom: note.folderPath)
+        _ = scanSingle(newPath)
         refreshVisibleNotes()
         autoCommitter?.markDirty()
         updatePendingState()
@@ -619,6 +633,7 @@ enum GitState: Equatable {
         let source = url(forFolder: path)
         let target = NoteFileName.uniqueURL(in: url(forFolder: parent), base: source.lastPathComponent, pathExtension: nil)
         editor?.save()
+        let movedNotes = notes.filter { $0.path.hasPrefix(path + "/") }
         do {
             try FileManager.default.moveItem(at: source, to: target)
         } catch {
@@ -627,9 +642,32 @@ enum GitState: Equatable {
         }
         let newPath = relativePath(of: target)
         relocateOpenNote(fromFolder: path, toFolder: newPath)
+        for note in movedNotes {
+            rewriteAssetLinks(ofNoteAt: newPath + note.path.dropFirst(path.count), movedFrom: note.folderPath)
+        }
         if sidebarSelection == .folder(path) { sidebarSelection = .folder(newPath) }
         autoCommitter?.markDirty()
         Task { await reload() }
+    }
+
+    /// Keeps relative links into `assets/` resolving after a note moved to another folder.
+    private func rewriteAssetLinks(ofNoteAt path: String, movedFrom oldDirectory: String) {
+        let newDirectory = (path as NSString).deletingLastPathComponent
+        guard newDirectory != oldDirectory else { return }
+        if let editor, editor.path == path {
+            let updated = Attachments.rewritingAssetLinks(in: editor.fullText, fromDirectory: oldDirectory, toDirectory: newDirectory)
+            if updated != editor.fullText { editor.replaceText(updated, markSaved: false) }
+            return
+        }
+        let url = rootURL.appendingPathComponent(path)
+        guard let text = RepositoryScanner.readText(url) else { return }
+        let updated = Attachments.rewritingAssetLinks(in: text, fromDirectory: oldDirectory, toDirectory: newDirectory)
+        guard updated != text else { return }
+        do {
+            try SafeFileWriter.write(Data(updated.utf8), to: url)
+        } catch {
+            errorMessage = "Couldn't update the attachment links in “\(url.lastPathComponent)”: \(error.localizedDescription)"
+        }
     }
 
     private func relocateOpenNote(fromFolder old: String, toFolder new: String) {
@@ -703,7 +741,8 @@ enum GitState: Equatable {
     private func initializeRepository(_ client: GitClient) async throws {
         try await client.initialize()
         RepositoryVetting.extendGitignore(at: rootURL)
-        try await client.commitAll(message: "Start versioning notes with NoteMD")
+        await checkAssetVersioning(using: client)
+        try await client.commitAll(message: "Start versioning notes with NoteMD", excluding: commitExclusions)
     }
 
     private func startVersioning(_ client: GitClient) {
@@ -713,9 +752,12 @@ enum GitState: Equatable {
                 MainActor.assumeIsolated { self?.handleCommitEvent(event) }
             }
         }
+        // Until LFS is confirmed, never commit attachments as plain blobs.
+        committer.excludedPaths = commitExclusions
         autoCommitter = committer
         gitState = .clean(lastCommit: nil)
         Task {
+            await configureAssetVersioning()
             if let timestamp = try? await client.run(["log", "-1", "--format=%at"]).trimmingCharacters(in: .whitespacesAndNewlines),
                let seconds = TimeInterval(timestamp), case .clean = gitState {
                 gitState = .clean(lastCommit: Date(timeIntervalSince1970: seconds))
@@ -747,6 +789,227 @@ enum GitState: Equatable {
         case .disabled, .starting, .needsConsent: break
         default: gitState = .pending
         }
+    }
+
+    // MARK: Attachments
+
+    var assetsURL: URL { rootURL.appendingPathComponent(Attachments.folderName, isDirectory: true) }
+    private var hasAssets: Bool { FileManager.default.fileExists(atPath: assetsURL.path) }
+    /// The voice note being recorded (repository-relative); kept out of commits until it's finished.
+    @ObservationIgnored private var recordingAsset: String?
+    @ObservationIgnored private var assetCheck: Task<Void, Never>?
+
+    /// Paths left out of commits: `assets/` until Git LFS is set up for the repository (decision-5),
+    /// so attachments never reach history as plain blobs, plus a recording in progress.
+    private var commitExclusions: [String] {
+        (lfsEnabled ? [] : [Attachments.folderName]) + (recordingAsset.map { [$0] } ?? [])
+    }
+
+    /// Sets up LFS once attachments exist and `git lfs` is available; flags a missing install.
+    private func checkAssetVersioning(using client: GitClient) async {
+        guard hasAssets, !lfsEnabled else {
+            if !hasAssets { lfsMissing = false }
+            return
+        }
+        guard await client.isLFSInstalled() else {
+            lfsMissing = true
+            return
+        }
+        lfsMissing = false
+        do {
+            try await client.enableLFS(tracking: Attachments.folderName + "/**")
+            lfsEnabled = true
+        } catch {
+            errorMessage = "Couldn't set up Git LFS for the attachments: \(error.localizedDescription)"
+        }
+    }
+
+    /// Re-checks Git LFS (e.g. after installing it or when attachments appear) and commits attachments
+    /// that were waiting for it. Checks run one at a time.
+    func configureAssetVersioning() async {
+        let previous = assetCheck
+        let check = Task {
+            await previous?.value
+            guard let git, let autoCommitter else { return }
+            let wasEnabled = lfsEnabled
+            await checkAssetVersioning(using: git)
+            autoCommitter.excludedPaths = commitExclusions
+            if !wasEnabled && lfsEnabled {
+                autoCommitter.markDirty()
+                updatePendingState()
+            }
+        }
+        assetCheck = check
+        await check.value
+    }
+
+    private func didAddAssets() {
+        if !lfsEnabled { Task { await configureAssetVersioning() } }
+    }
+
+    /// Copies or links files into the note at `path` (drops, pastes, recordings).
+    func attachmentImporter(forNoteAt path: String) -> AttachmentImporter {
+        attachmentImporter(forFolder: (path as NSString).deletingLastPathComponent)
+    }
+
+    /// Copies or links files for notes in the folder at `folderPath` ("" for the root).
+    func attachmentImporter(forFolder folderPath: String) -> AttachmentImporter {
+        AttachmentImporter(
+            rootURL: rootURL, noteDirectory: url(forFolder: folderPath),
+            didAddAssets: { [weak self] in self?.didAddAssets() })
+    }
+
+    /// Replaces `range` (UTF-16, full-text coordinates) in the note at `path`: as an undoable edit when the
+    /// note is open in the editor, otherwise straight in the file.
+    func replace(_ range: NSRange, with text: String, inNoteAt path: String) {
+        if let editor, editor.path == path {
+            let prefix = editor.hiddenPrefixLength
+            let editorRange = NSRange(location: max(range.location - prefix, 0), length: range.length)
+            if !editor.textBridge.replace(editorRange, with: text) {
+                let full = editor.fullText as NSString
+                editor.replaceText(full.replacingCharacters(in: Self.clamp(range, to: full.length, minimum: prefix), with: text), markSaved: false)
+            }
+            return
+        }
+        let url = rootURL.appendingPathComponent(path)
+        guard SafeFileWriter.isSafeRelativePath(path), let current = RepositoryScanner.readText(url) else {
+            errorMessage = "Couldn't update “\((path as NSString).lastPathComponent)”: the note is gone."
+            return
+        }
+        let ns = current as NSString
+        let updated = ns.replacingCharacters(in: Self.clamp(range, to: ns.length, minimum: 0), with: text)
+        do {
+            try SafeFileWriter.write(Data(updated.utf8), to: url)
+        } catch {
+            errorMessage = "Couldn't update “\(url.lastPathComponent)”: \(error.localizedDescription)"
+            return
+        }
+        _ = scanSingle(path)
+        refreshVisibleNotes()
+        autoCommitter?.markDirty()
+        updatePendingState()
+    }
+
+    func insert(_ text: String, intoNoteAt path: String, atFullTextOffset offset: Int) {
+        replace(NSRange(location: offset, length: 0), with: text, inNoteAt: path)
+    }
+
+    private static func clamp(_ range: NSRange, to length: Int, minimum: Int) -> NSRange {
+        let location = min(max(range.location, minimum), length)
+        return NSRange(location: location, length: min(max(range.length, 0), length - location))
+    }
+
+    /// Full text of the note at `path`: the editor's when it's open, else the file's.
+    func currentText(ofNoteAt path: String) -> String? {
+        if let editor, editor.path == path { return editor.fullText }
+        return RepositoryScanner.readText(rootURL.appendingPathComponent(path))
+    }
+
+    // MARK: Voice notes
+
+    static let recordingLabel = "Recording voice note…"
+
+    /// Starts recording a voice note at the open note's caret (or its end). A placeholder embed goes in as
+    /// soon as recording starts; it's found again by its file name when recording ends, wherever the
+    /// note moved or however it was edited meanwhile.
+    func startVoiceNote() {
+        showsVoiceRecorder = true
+        guard let editor, !voiceRecorder.isRecording else { return }
+        let path = editor.path
+        let offset = (editor.textBridge.selectedLocation ?? (editor.editorText as NSString).length) + editor.hiddenPrefixLength
+        let importer = attachmentImporter(forNoteAt: path)
+        guard let url = importer.newAssetURL(fileName: Attachments.timestampedName(prefix: "voice", pathExtension: "m4a")) else { return }
+        voiceRecorder.start(saving: url) { [weak self] event in
+            guard let self else { return }
+            switch event {
+            case .started:
+                recordingAsset = Attachments.folderName + "/" + url.lastPathComponent
+                autoCommitter?.excludedPaths = commitExclusions
+                let placeholder = Attachments.markdownLink(name: Self.recordingLabel, destination: importer.relativeDestination(to: url), kind: .audio)
+                insert(Attachments.ownLine(placeholder, in: currentText(ofNoteAt: path) ?? "", at: offset), intoNoteAt: path, atFullTextOffset: offset)
+            case .finished(let clip):
+                finishRecording()
+                let label = "Voice note " + Date().formatted(date: .abbreviated, time: .shortened)
+                if let (notePath, ranges) = notePath(embedding: clip.lastPathComponent, preferring: path) {
+                    replace(ranges.label, with: Attachments.escapeLabel(label), inNoteAt: notePath)
+                } else if note(at: path) != nil || editor.path == path {
+                    // The placeholder was deleted meanwhile: link the clip at the end of the note.
+                    let text = currentText(ofNoteAt: path) ?? ""
+                    let link = Attachments.markdownLink(name: label, destination: importer.relativeDestination(to: clip), kind: .audio)
+                    insert(Attachments.ownLine(link, in: text, at: (text as NSString).length), intoNoteAt: path, atFullTextOffset: (text as NSString).length)
+                }
+                didAddAssets()
+            case .cancelled:
+                finishRecording()
+                if let (notePath, ranges) = notePath(embedding: url.lastPathComponent, preferring: path),
+                   let text = currentText(ofNoteAt: notePath) {
+                    replace(Attachments.removalRange(of: ranges.embed, in: text), with: "", inNoteAt: notePath)
+                }
+            }
+        }
+    }
+
+    private func finishRecording() {
+        showsVoiceRecorder = false
+        recordingAsset = nil
+        autoCommitter?.excludedPaths = commitExclusions
+        autoCommitter?.markDirty()
+        updatePendingState()
+    }
+
+    /// The note embedding a file named `fileName`: the open note, then `path`, then any other note.
+    private func notePath(embedding fileName: String, preferring path: String) -> (String, (embed: NSRange, label: NSRange))? {
+        var candidates = [path] + notes.map(\.path).filter { $0 != path }
+        if let open = editor?.path { candidates.insert(open, at: 0) }
+        for candidate in candidates {
+            guard let text = currentText(ofNoteAt: candidate), text.contains(fileName),
+                  let ranges = Attachments.embedRanges(linkingFileNamed: fileName, in: text)
+            else { continue }
+            return (candidate, ranges)
+        }
+        return nil
+    }
+
+    // MARK: Transcripts
+
+    /// The audio file a `+[…](source)` embed in the note at `path` points at.
+    func audioURL(forSource source: String, inNoteAt path: String) -> URL? {
+        Attachments.fileURL(forDestination: source, relativeTo: rootURL.appendingPathComponent(path).deletingLastPathComponent())
+    }
+
+    /// Adds `transcript` as a quote right below the line embedding `source` (or at the end).
+    func insertTranscript(_ transcript: String, forSource source: String, inNoteAt path: String) {
+        guard let text = currentText(ofNoteAt: path) else { return }
+        let offset = Attachments.endOfLine(linking: source, in: text)
+        insert(Attachments.ownLine(Attachments.quote(transcript), in: text, at: offset), intoNoteAt: path, atFullTextOffset: offset)
+    }
+
+    // MARK: Files from other apps
+
+    /// Creates one note per file (Dock drops, Open With) embedding it: files from elsewhere are copied into
+    /// `assets/`, files already in the repository are linked where they are.
+    func addNotes(embedding files: [URL]) {
+        let importer = attachmentImporter(forFolder: "")
+        for file in files {
+            guard let link = importer.markdown(forFiles: [file], mode: .copy) else { continue }
+            let name = file.deletingPathExtension().lastPathComponent
+            createNote(in: "", title: name, body: "# \(name)\n\n\(link)\n")
+        }
+    }
+
+    /// A new note from a Services request: text and URLs become the body, files and images are attached.
+    func addNote(text: String?, files: [URL], imageData: Data?) {
+        let importer = attachmentImporter(forFolder: "")
+        var parts: [String] = []
+        if let text, !text.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty { parts.append(text) }
+        if !files.isEmpty {
+            if let links = importer.markdown(forFiles: files, mode: .copy) { parts.append(links) }
+        } else if let imageData, let link = importer.markdown(forImageData: imageData) {
+            parts.append(link)
+        }
+        guard !parts.isEmpty else { return }
+        let title = files.count == 1 && text == nil ? files[0].deletingPathExtension().lastPathComponent : nil
+        createNote(in: "", title: title, body: (title.map { "# \($0)\n\n" } ?? "") + parts.joined(separator: "\n\n") + "\n")
     }
 
     var isVersioned: Bool {

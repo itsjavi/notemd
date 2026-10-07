@@ -31,6 +31,8 @@ pb "Set :AppVariant $VARIANT"
 pb "Set :AppURLScheme $SCHEME"
 pb "Set :CFBundleURLTypes:0:CFBundleURLName $BUNDLE_ID"
 pb "Set :CFBundleURLTypes:0:CFBundleURLSchemes:0 $SCHEME"
+pb "Set :NSServices:0:NSMenuItem:default New $NAME Note"
+pb "Set :NSServices:0:NSPortName $NAME"
 if [[ -n "${BUILD_NUMBER:-}" ]]; then pb "Set :CFBundleVersion $BUILD_NUMBER"; fi
 if [[ "$VARIANT" == "test" ]]; then
   # Background agent build: no Dock icon, never steals focus, no App Nap.
@@ -54,6 +56,6 @@ SIGN_IDENTITY="${SIGN_IDENTITY:--}"
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
   codesign --force --sign - "$APP"
 else
-  codesign --force --options runtime --timestamp --sign "$SIGN_IDENTITY" "$APP"
+  codesign --force --options runtime --timestamp --entitlements Resources/NoteMD.entitlements --sign "$SIGN_IDENTITY" "$APP"
 fi
 echo "Built $APP"

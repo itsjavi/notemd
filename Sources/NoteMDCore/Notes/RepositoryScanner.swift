@@ -47,6 +47,8 @@ public enum RepositoryScanner {
             if values?.isSymbolicLink == true { continue }
             if values?.isDirectory == true {
                 if values?.isPackage == true || ignoredDirectories.contains(itemName) { continue }
+                // Attachments, not a note folder.
+                if relativePath.isEmpty && itemName.lowercased() == Attachments.folderName { continue }
                 if let child = try? scanFolder(item, relativePath: itemPath, name: itemName, previous: previous, notes: &notes) {
                     children.append(child)
                 }

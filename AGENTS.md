@@ -220,6 +220,7 @@ Decisions live in `backlog/decisions/` (platform, storage format, git versioning
 | `Sources/NoteMD/App`                                                                        | App entry, delegate, window manager, settings, variants                                     |
 | `Sources/NoteMD/Repository`                                                                 | Per-window `RepositoryStore`, open-note `NoteEditor`, FSEvents watcher                      |
 | `Sources/NoteMD/Views`, `Editor`, `Preview`, `Folders`, `Templates`, `History`, `Documents` | UI                                                                                          |
+| `Sources/NoteMD/Attachments`, `Voice`                                                       | Drop/paste importer (assets/ copy or link), voice recorder, on-device transcription         |
 | `Sources/NoteMD/Debug`                                                                      | URL scheme handler; DEBUG-only test hooks                                                   |
 | `Resources/`                                                                                | Info.plist, privacy manifest, `AppIcon.icon`                                                |
 | `scripts/`                                                                                  | `build-app.sh`, `make-icon.swift`, `window-screenshot.swift`                                |
@@ -245,6 +246,10 @@ note paths must be plain repository-relative paths.
 - `ui/sheet?name=history|form|params|rename|folder-new|folder-edit&path=`, `ui/close-sheet`
 - `ui/move?note=&folder=`, `ui/move-folder?path=&parent=`, `ui/rename?note=&name=`, `ui/trash?note=`, `ui/restore-deleted?path=`
 - `ui/editor-command?name=tab|backtab|newline|text&text=&select=end|all[&target=document]`, `ui/settings`
+- `ui/attachment-mode?value=ask|copy|link`, `ui/drop-files?paths=a,b`, `ui/paste-file?path=`, `ui/paste-image?path=`
+  (absolute temp paths; `select=end`, `target=document`), `ui/service-note?text=&file=`, `ui/lfs-check`
+- `ui/voice-start?from=<clip>|seconds=` (recorder with the microphone replaced by that clip), `ui/voice-stop`, `ui/voice-cancel`,
+  `ui/transcribe?src=<link destination>&lang=en-US`, `ui/sheet?name=transcribe|recorder&src=`
 - `ui/commit-now`, `ui/restore?path=&rev=`, `ui/window-size?w=&h=`, `ui/appearance?value=dark|light`
 - `debug/state?out=/private/tmp/state.txt` writes a `key: value` state dump
 

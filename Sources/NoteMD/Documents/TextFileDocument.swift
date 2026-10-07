@@ -14,6 +14,12 @@ import UniformTypeIdentifiers
     var isReadOnly = false
     @ObservationIgnored weak var document: NSDocument?
     @ObservationIgnored var onEdit: (() -> Void)?
+    /// The on-screen text view, for undoable insertions (voice notes, transcripts).
+    @ObservationIgnored let textBridge = EditorTextBridge()
+    let voiceRecorder = VoiceRecorder()
+    var showsVoiceRecorder = false
+    /// Clip being transcribed (its link destination), shown as a sheet.
+    var transcribeSource: String?
 
     var fileURL: URL? { document?.fileURL }
 
@@ -21,6 +27,71 @@ import UniformTypeIdentifiers
         guard newText != text else { return }
         text = newText
         onEdit?()
+    }
+
+    // MARK: Attachments
+
+    /// Attachments of a standalone document go to an `assets/` folder next to it.
+    var attachmentImporter: AttachmentImporter? {
+        guard isMarkdown, !isReadOnly, let directory = fileURL?.deletingLastPathComponent() else { return nil }
+        return AttachmentImporter(rootURL: directory, noteDirectory: directory)
+    }
+
+    /// Replaces a UTF-16 range: one undoable edit when the editor is on screen.
+    func replace(_ range: NSRange, with replacement: String) {
+        guard !textBridge.replace(range, with: replacement) else { return }
+        let ns = text as NSString
+        let location = min(max(range.location, 0), ns.length)
+        edit(ns.replacingCharacters(in: NSRange(location: location, length: min(range.length, ns.length - location)), with: replacement))
+        revision += 1
+    }
+
+    func insert(_ insertion: String, at offset: Int) {
+        replace(NSRange(location: offset, length: 0), with: insertion)
+    }
+
+    /// Records a voice note at the caret: a placeholder embed goes in when recording starts and is finished
+    /// (or removed on cancel) by its file name, however the text changed meanwhile.
+    func startVoiceNote() {
+        showsVoiceRecorder = true
+        guard !voiceRecorder.isRecording, let importer = attachmentImporter else { return }
+        let offset = textBridge.selectedLocation ?? (text as NSString).length
+        guard let url = importer.newAssetURL(fileName: Attachments.timestampedName(prefix: "voice", pathExtension: "m4a")) else { return }
+        voiceRecorder.start(saving: url) { [weak self] event in
+            guard let self else { return }
+            let fileName = url.lastPathComponent
+            if case .started = event {} else { showsVoiceRecorder = false }
+            switch event {
+            case .started:
+                let placeholder = Attachments.markdownLink(name: RepositoryStore.recordingLabel, destination: importer.relativeDestination(to: url), kind: .audio)
+                insert(Attachments.ownLine(placeholder, in: text, at: offset), at: offset)
+            case .finished:
+                let label = "Voice note " + Date().formatted(date: .abbreviated, time: .shortened)
+                if let ranges = Attachments.embedRanges(linkingFileNamed: fileName, in: text) {
+                    replace(ranges.label, with: Attachments.escapeLabel(label))
+                } else {
+                    let link = Attachments.markdownLink(name: label, destination: importer.relativeDestination(to: url), kind: .audio)
+                    insert(Attachments.ownLine(link, in: text, at: (text as NSString).length), at: (text as NSString).length)
+                }
+            case .cancelled:
+                if let ranges = Attachments.embedRanges(linkingFileNamed: fileName, in: text) {
+                    replace(Attachments.removalRange(of: ranges.embed, in: text), with: "")
+                }
+            }
+        }
+    }
+
+    /// Links an existing clip at `offset` (test hooks).
+    func insertVoiceNote(_ clip: URL, at offset: Int) {
+        guard let importer = attachmentImporter else { return }
+        let name = "Voice note " + Date().formatted(date: .abbreviated, time: .shortened)
+        let link = Attachments.markdownLink(name: name, destination: importer.relativeDestination(to: clip), kind: .audio)
+        insert(Attachments.ownLine(link, in: text, at: offset), at: offset)
+    }
+
+    func insertTranscript(_ transcript: String, forSource source: String) {
+        let offset = Attachments.endOfLine(linking: source, in: text)
+        insert(Attachments.ownLine(Attachments.quote(transcript), in: text, at: offset), at: offset)
     }
 }
 
@@ -51,9 +122,8 @@ final class TextFileDocument: NSDocument {
     }
 
     private nonisolated static func decode(_ data: Data) throws -> (String, String.Encoding, Bool) {
-        // Any file type can be opened, so refuse binary content (NUL bytes) unless it's UTF-16/32 text with a BOM.
-        let hasByteOrderMark = data.starts(with: [0xFF, 0xFE]) || data.starts(with: [0xFE, 0xFF])
-        if !hasByteOrderMark && data.prefix(8192).contains(0) {
+        // Any file type can be opened, so refuse binary content.
+        if !TextDetection.isText(data) {
             throw NSError(domain: NSCocoaErrorDomain, code: CocoaError.fileReadCorruptFile.rawValue, userInfo: [
                 NSLocalizedDescriptionKey: "This file isn't text.",
                 NSLocalizedRecoverySuggestionErrorKey: "NoteMD opens Markdown and other text files.",
@@ -76,6 +146,15 @@ final class TextFileDocument: NSDocument {
     }
 
     override var shouldRunSavePanelWithAccessoryView: Bool { false }
+
+    override func close() {
+        // Keep a running voice note: link it and write the document before the window goes.
+        if model.voiceRecorder.isRecording, let fileURL, let fileType {
+            model.voiceRecorder.stop()
+            try? write(to: fileURL, ofType: fileType)
+        }
+        super.close()
+    }
 
     nonisolated static func isMarkdown(typeName: String, url: URL?) -> Bool {
         if let ext = url?.pathExtension.lowercased(), !ext.isEmpty {
@@ -134,6 +213,13 @@ struct DocumentEditorView: View {
         }
         .frame(minWidth: 520, minHeight: 360)
         .toolbar {
+            if model.attachmentImporter != nil {
+                ToolbarItem {
+                    VoiceNoteButton(recorder: model.voiceRecorder, showsPanel: Bindable(model).showsVoiceRecorder) {
+                        model.startVoiceNote()
+                    }
+                }
+            }
             if model.isMarkdown {
                 if isTemplate {
                     ToolbarItem {
@@ -171,6 +257,11 @@ struct DocumentEditorView: View {
             }
         }
         .onChange(of: settings.editorMode) { _, newValue in mode = newValue }
+        .sheet(isPresented: Binding(get: { model.transcribeSource != nil }, set: { if !$0 { model.transcribeSource = nil } })) {
+            if let source = model.transcribeSource, let audio = Attachments.fileURL(forDestination: source, relativeTo: directory) {
+                TranscriptionSheet(audioURL: audio) { text in model.insertTranscript(text, forSource: source) }
+            }
+        }
         .sheet(isPresented: $showTemplateForm) {
             TemplateFormView(source: .document(title: model.fileURL?.deletingPathExtension().lastPathComponent ?? "Template", markdown: model.text, fileURL: model.fileURL))
         }
@@ -186,6 +277,8 @@ struct DocumentEditorView: View {
             indentation: settings.indentation,
             readableWidth: model.isMarkdown && settings.readableLineWidth && mode != .split ? 760 : 0,
             spellChecking: settings.spellChecking,
+            attachmentImporter: model.attachmentImporter,
+            bridge: model.textBridge,
             onChange: { model.edit($0) },
             onScroll: sync ? { scrollLine = $0 } : nil
         )
@@ -198,7 +291,8 @@ struct DocumentEditorView: View {
             accessRoot: directory,
             frontMatter: .table,
             scrollLine: mode == .split ? scrollLine : nil,
-            onOpenNote: { url in WindowManager.shared.openFile(url) }
+            onOpenNote: { url in WindowManager.shared.openFile(url) },
+            onTranscribe: model.isMarkdown ? { source in model.transcribeSource = source } : nil
         )
     }
 }

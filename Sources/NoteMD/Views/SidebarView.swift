@@ -160,6 +160,9 @@ private struct SidebarFooter: View {
             .help("Switch notes folder")
 
             GitStatusLine()
+            if store.lfsMissing {
+                LFSWarning()
+            }
         }
         .padding(.horizontal, 12)
         .padding(.bottom, 10)
@@ -217,5 +220,29 @@ private struct GitStatusLine: View {
         .font(.caption)
         .foregroundStyle(.secondary)
         .lineLimit(1)
+    }
+}
+
+/// Attachments wait outside git history until Git LFS is installed (decision-5).
+private struct LFSWarning: View {
+    @Environment(RepositoryStore.self) private var store
+
+    var body: some View {
+        VStack(alignment: .leading, spacing: 2) {
+            HStack(spacing: 6) {
+                Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.yellow)
+                Text("Assets not versioned")
+                Spacer(minLength: 4)
+                Button("Check Again") { Task { await store.configureAssetVersioning() } }
+                    .buttonStyle(.link)
+            }
+            Text("Install Git LFS: brew install git-lfs")
+                .textSelection(.enabled)
+                .padding(.leading, 20)
+        }
+        .font(.caption)
+        .foregroundStyle(.secondary)
+        .lineLimit(1)
+        .help("Files in the assets folder are only versioned with Git LFS. Install it, then click Check Again.")
     }
 }

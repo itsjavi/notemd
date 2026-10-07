@@ -1,6 +1,29 @@
 import AppKit
 import SwiftUI
 
+/// Inserts text into an editor that may or may not be on screen: through the text view when it is
+/// (one undoable edit), otherwise not at all so the caller can edit the model instead.
+final class EditorTextBridge {
+    weak var textView: NSTextView?
+
+    /// The caret position in editor coordinates, when the editor is on screen.
+    var selectedLocation: Int? { textView?.selectedRange().location }
+
+    /// Inserts `text` at `location`; false when the editor isn't on screen.
+    func insert(_ text: String, at location: Int) -> Bool {
+        replace(NSRange(location: location, length: 0), with: text)
+    }
+
+    /// Replaces `range` (editor coordinates) as one undoable edit; false when the editor isn't on screen.
+    func replace(_ range: NSRange, with text: String) -> Bool {
+        guard let textView, textView.window != nil else { return false }
+        let length = (textView.string as NSString).length
+        let location = min(max(range.location, 0), length)
+        textView.insertText(text, replacementRange: NSRange(location: location, length: min(max(range.length, 0), length - location)))
+        return true
+    }
+}
+
 /// SwiftUI wrapper around `MarkdownTextView`.
 ///
 /// Text flows out through `onChange`; text flows in only on creation or when
@@ -15,6 +38,9 @@ struct MarkdownEditor: NSViewRepresentable {
     var readableWidth: CGFloat
     var spellChecking: Bool
     var focusOnAppear = false
+    var attachmentImporter: AttachmentImporter?
+    /// Gives code outside the view (voice notes, transcripts) access to the live text view.
+    var bridge: EditorTextBridge?
     var onChange: (String) -> Void
     /// Reports the first visible source line (1-based) while scrolling.
     var onScroll: ((Int) -> Void)?
@@ -104,6 +130,8 @@ struct MarkdownEditor: NSViewRepresentable {
     @discardableResult
     private func configure(_ textView: MarkdownTextView, coordinator: Coordinator) -> Bool {
         textView.isEditable = isEditable
+        textView.attachmentImporter = isEditable ? attachmentImporter : nil
+        bridge?.textView = textView
         textView.isContinuousSpellCheckingEnabled = spellChecking && isMarkdown
         textView.readableWidth = readableWidth
         let changed = coordinator.styledFont != font || textView.isMarkdown != isMarkdown || textView.indentation != indentation

@@ -19,6 +19,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         launchFinished = true
+        NSApp.servicesProvider = self
+        NSUpdateDynamicServices()
         // The open-documents event of a launch arrives before this point.
         if !openedDocumentAtLaunch { WindowManager.shared.restoreRepositories() }
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
@@ -27,6 +29,12 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
                 if !hasWindows && !self.openedAtLaunch { WindowManager.shared.showWelcome() }
             }
         }
+    }
+
+    /// Services menu “New NoteMD Note” (NSServices in Info.plist).
+    @objc(createNote:userData:error:)
+    func createNote(_ pasteboard: NSPasteboard, userData: String?, error: AutoreleasingUnsafeMutablePointer<NSString?>) {
+        WindowManager.shared.addNoteFromService(pasteboard)
     }
 
     @objc private func handleOpenDocuments(_ event: NSAppleEventDescriptor, withReplyEvent reply: NSAppleEventDescriptor) {
@@ -41,9 +49,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         openedAtLaunch = true
         for url in urls {
             if url.isFileURL {
-                let isFolder = (try? url.resourceValues(forKeys: [.isDirectoryKey]))?.isDirectory == true
-                if !launchFinished && !isFolder { openedDocumentAtLaunch = true }
-                WindowManager.shared.openFile(url)
+                let outcome = WindowManager.shared.openFile(url)
+                if !launchFinished && outcome == .document { openedDocumentAtLaunch = true }
             } else if url.scheme == AppVariant.urlScheme {
                 URLCommandHandler.handle(url)
             }

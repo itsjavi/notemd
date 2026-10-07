@@ -55,6 +55,14 @@ struct RepositoryWindowView: View {
             } else {
                 SheetUnavailable()
             }
+        case .transcribe(let path, let source):
+            if let audio = store.audioURL(forSource: source, inNoteAt: path) {
+                TranscriptionSheet(audioURL: audio) { text in
+                    store.insertTranscript(text, forSource: source, inNoteAt: path)
+                }
+            } else {
+                SheetUnavailable()
+            }
         }
     }
 }

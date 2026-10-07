@@ -60,6 +60,8 @@ struct NoteEditorPane: View {
             readableWidth: settings.readableLineWidth && settings.editorMode != .split ? 740 : 0,
             spellChecking: settings.spellChecking,
             focusOnAppear: consumeFocus(),
+            attachmentImporter: store.attachmentImporter(forNoteAt: editor.path),
+            bridge: editor.textBridge,
             onChange: { editor.editorTextChanged($0) },
             onScroll: syncScroll ? { line in
                 // Body line numbers are offset by the hidden front matter.
@@ -87,9 +89,15 @@ struct NoteEditorPane: View {
             accessRoot: store.rootURL,
             scrollLine: settings.editorMode == .split ? scrollLine : nil,
             onOpenNote: { url in
+                // Absolute links can point outside the repository: open those as documents.
+                guard url.canonical.path.hasPrefix(store.rootURL.path + "/") else {
+                    WindowManager.shared.openFile(url)
+                    return
+                }
                 let path = store.relativePath(of: url)
                 if store.note(at: path) != nil { store.selectedNoteID = path }
-            }
+            },
+            onTranscribe: { source in store.sheet = .transcribe(path: editor.path, source: source) }
         )
     }
 }
@@ -221,6 +229,11 @@ private struct NoteToolbar: ToolbarContent {
     private let settings = AppSettings.shared
 
     var body: some ToolbarContent {
+        ToolbarItem {
+            VoiceNoteButton(recorder: store.voiceRecorder, showsPanel: Bindable(store).showsVoiceRecorder) {
+                store.startVoiceNote()
+            }
+        }
         ToolbarItem {
             Picker("Mode", selection: Bindable(settings).editorMode) {
                 ForEach(EditorMode.allCases) { mode in

@@ -19,6 +19,7 @@ public final class AutoCommitter: @unchecked Sendable {
     private let queue = DispatchQueue(label: "NoteMD.AutoCommitter")
 
     // Guarded by `queue`.
+    private var currentExcludedPaths: [String] = []
     private var currentIdleDelay: TimeInterval
     private var firstDirtyAt: DispatchTime?
     private var lastDirtyAt: DispatchTime?
@@ -50,6 +51,12 @@ public final class AutoCommitter: @unchecked Sendable {
                 scheduleTimer()
             }
         }
+    }
+
+    /// Paths left out of commits (e.g. attachments while Git LFS is unavailable).
+    public var excludedPaths: [String] {
+        get { queue.sync { currentExcludedPaths } }
+        set { queue.sync { currentExcludedPaths = newValue } }
     }
 
     /// Call after every save: (re)starts the idle timer without postponing past `maxDelay`.
@@ -102,10 +109,12 @@ public final class AutoCommitter: @unchecked Sendable {
     private func enqueueCommit(message: String? = nil) -> Task<Void, Never> {
         resetPending()
         let previous = lastCommit
-        let commit = Task(priority: .utility) { [git, onEvent] in
+        let commit = Task(priority: .utility) { [self, git, onEvent] in
             await previous?.value
+            // Read now, not when queued: exclusions may have changed while an earlier commit ran.
+            let excluded = excludedPaths
             do {
-                if let commit = try await git.commitAll(message: message) {
+                if let commit = try await git.commitAll(message: message, excluding: excluded) {
                     onEvent(.committed(commit))
                 } else {
                     onEvent(.nothingToCommit)

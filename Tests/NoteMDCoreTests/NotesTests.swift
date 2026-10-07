@@ -66,6 +66,7 @@ import Testing
         #expect(NoteTitle.derive(frontMatterTitle: nil, body: "```\n# not\n```\n# Real *one* #", fileName: "f") == "Real one")
         #expect(NoteTitle.derive(frontMatterTitle: " ", body: "no heading", fileName: "file") == "file")
         #expect(NoteTitle.excerpt(of: "# Title\n\n- [ ] Buy **milk**\n> quote [link](http://x)", skippingTitle: "Title") == "Buy milk quote link")
+        #expect(NoteTitle.excerpt(of: "+[Voice note](assets/v.m4a) ![shot](a.png)", skippingTitle: "") == "Voice note shot")
     }
 
     @Test func fileNames() throws {

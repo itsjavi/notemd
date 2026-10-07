@@ -57,6 +57,20 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
     }
 }
 
+/// What happens to files dropped or pasted into a note from outside its repository (decision-5).
+enum AttachmentImportMode: String, CaseIterable, Identifiable {
+    case ask, copy, link
+    var id: String { rawValue }
+
+    var title: String {
+        switch self {
+        case .ask: "Ask Each Time"
+        case .copy: "Copy into Assets"
+        case .link: "Link to Original"
+        }
+    }
+}
+
 /// App preferences, written through to UserDefaults.
 @Observable final class AppSettings {
     static let shared = AppSettings()
@@ -83,6 +97,9 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
     var recentRepositories: [String] { didSet { defaults.set(recentRepositories, forKey: Keys.recentRepositories) } }
     /// Repositories open at quit, reopened at launch.
     var openRepositories: [String] { didSet { defaults.set(openRepositories, forKey: Keys.openRepositories) } }
+    var attachmentImportMode: AttachmentImportMode { didSet { defaults.set(attachmentImportMode.rawValue, forKey: Keys.attachmentImportMode) } }
+    /// Locale identifier preselected for transcriptions; empty means the system language.
+    var transcriptionLanguage: String { didSet { defaults.set(transcriptionLanguage, forKey: Keys.transcriptionLanguage) } }
 
     private enum Keys {
         static let commitDelay = "commitDelay"
@@ -99,6 +116,8 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
         static let loadRemoteImages = "loadRemoteImages"
         static let recentRepositories = "recentRepositories"
         static let openRepositories = "openRepositories"
+        static let attachmentImportMode = "attachmentImportMode"
+        static let transcriptionLanguage = "transcriptionLanguage"
     }
 
     private init() {
@@ -115,6 +134,8 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
             Keys.sortOrder: NoteSortOrder.modified.rawValue,
             Keys.includeSubfolders: true,
             Keys.loadRemoteImages: true,
+            Keys.attachmentImportMode: AttachmentImportMode.ask.rawValue,
+            Keys.transcriptionLanguage: "",
         ])
         commitDelay = defaults.double(forKey: Keys.commitDelay)
         editorFontStyle = EditorFontStyle(rawValue: defaults.string(forKey: Keys.editorFontStyle) ?? "") ?? .system
@@ -130,6 +151,8 @@ enum NoteSortOrder: String, CaseIterable, Identifiable {
         loadRemoteImages = defaults.bool(forKey: Keys.loadRemoteImages)
         recentRepositories = defaults.stringArray(forKey: Keys.recentRepositories) ?? []
         openRepositories = defaults.stringArray(forKey: Keys.openRepositories) ?? []
+        attachmentImportMode = AttachmentImportMode(rawValue: defaults.string(forKey: Keys.attachmentImportMode) ?? "") ?? .ask
+        transcriptionLanguage = defaults.string(forKey: Keys.transcriptionLanguage) ?? ""
     }
 
     var indentation: Indentation { Indentation(usesTabs: indentWithTabs, width: indentWidth) }

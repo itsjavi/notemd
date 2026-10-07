@@ -57,6 +57,11 @@ enum PreviewPage {
     th { font-weight: 600; }
     tr:nth-child(2n) { background: var(--canvas-subtle); }
     img { max-width: 100%; box-sizing: content-box; }
+    .media-embed { display: block; margin: 4px 0 8px; }
+    .media-embed audio { display: block; width: 100%; max-width: 520px; }
+    .media-embed video { display: block; max-width: 100%; max-height: 70vh; border-radius: 8px; background: #000; }
+    .media-caption { display: block; margin-top: 4px; font-size: 12px; color: var(--muted); }
+    .media-action { margin-left: 8px; font-weight: 500; }
     mark { background: var(--mark); color: inherit; }
     details summary { cursor: pointer; }
     del { color: var(--muted); }

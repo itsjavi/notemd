@@ -9,9 +9,77 @@ final class MarkdownTextView: NSTextView {
         didSet { updateInsets() }
     }
 
+    /// Turns dropped and pasted files into Markdown links; nil keeps NSTextView's behavior.
+    var attachmentImporter: AttachmentImporter? {
+        didSet { if (oldValue == nil) != (attachmentImporter == nil) { updateDragTypeRegistration() } }
+    }
+
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         updateInsets()
+    }
+
+    // MARK: Attachments
+
+    private static func fileURLs(on pasteboard: NSPasteboard) -> [URL] {
+        pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+    }
+
+    override var readablePasteboardTypes: [NSPasteboard.PasteboardType] {
+        // Lets Paste stay enabled for copied images and files.
+        attachmentImporter == nil ? super.readablePasteboardTypes : super.readablePasteboardTypes + [.fileURL, .png, .tiff]
+    }
+
+    override func dragOperation(for dragInfo: any NSDraggingInfo, type: NSPasteboard.PasteboardType) -> NSDragOperation {
+        if attachmentImporter != nil, isEditable, !Self.fileURLs(on: dragInfo.draggingPasteboard).isEmpty { return .copy }
+        return super.dragOperation(for: dragInfo, type: type)
+    }
+
+    override func performDragOperation(_ sender: any NSDraggingInfo) -> Bool {
+        let urls = Self.fileURLs(on: sender.draggingPasteboard)
+        guard attachmentImporter != nil, isEditable, !urls.isEmpty else { return super.performDragOperation(sender) }
+        let index = characterIndexForInsertion(at: convert(sender.draggingLocation, from: nil))
+        // Finish the drag session before a copy-or-link prompt can appear.
+        DispatchQueue.main.async { [weak self] in
+            self?.insertAttachments(urls, at: NSRange(location: index, length: 0))
+        }
+        return true
+    }
+
+    override func paste(_ sender: Any?) {
+        let pasteboard = NSPasteboard.general
+        if attachmentImporter != nil, isEditable {
+            let urls = Self.fileURLs(on: pasteboard)
+            // One copied file is attached; several keep the normal paste (their names).
+            if urls.count == 1 {
+                insertAttachments(urls, at: selectedRange())
+                return
+            }
+            // Image data alone (e.g. a crop copied in Preview); text wins when both are there.
+            if urls.isEmpty, pasteboard.string(forType: .string) == nil,
+               let data = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff) {
+                pasteImageData(data)
+                return
+            }
+        }
+        super.paste(sender)
+    }
+
+    /// Copies or links `urls` and inserts their links at `range` as one undoable edit.
+    func insertAttachments(_ urls: [URL], at range: NSRange) {
+        guard let markdown = attachmentImporter?.markdown(forFiles: urls) else { return }
+        insertMarkdown(markdown, at: range)
+    }
+
+    func pasteImageData(_ data: Data) {
+        guard let markdown = attachmentImporter?.markdown(forImageData: data) else { return }
+        insertMarkdown(markdown, at: selectedRange())
+    }
+
+    private func insertMarkdown(_ markdown: String, at range: NSRange) {
+        let length = (string as NSString).length
+        let location = min(range.location, length)
+        insertText(markdown, replacementRange: NSRange(location: location, length: min(range.length, length - location)))
     }
 
     private func updateInsets() {

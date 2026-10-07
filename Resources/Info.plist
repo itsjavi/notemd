@@ -36,6 +36,35 @@
 	<string>© 2026 Javi Aguilar</string>
 	<key>ITSAppUsesNonExemptEncryption</key>
 	<false/>
+	<key>NSMicrophoneUsageDescription</key>
+	<string>NoteMD records voice notes into your notes.</string>
+	<key>NSSpeechRecognitionUsageDescription</key>
+	<string>NoteMD transcribes voice notes on this Mac when you ask it to.</string>
+	<key>NSServices</key>
+	<array>
+		<dict>
+			<!-- Menu title and port name are set per build variant by scripts/build-app.sh. -->
+			<key>NSMenuItem</key>
+			<dict>
+				<key>default</key>
+				<string>New NoteMD Note</string>
+			</dict>
+			<key>NSMessage</key>
+			<string>createNote</string>
+			<key>NSPortName</key>
+			<string>NoteMD</string>
+			<key>NSRequiredContext</key>
+			<dict/>
+			<key>NSSendTypes</key>
+			<array>
+				<string>public.utf8-plain-text</string>
+				<string>public.url</string>
+				<string>public.file-url</string>
+				<string>public.png</string>
+				<string>public.tiff</string>
+			</array>
+		</dict>
+	</array>
 	<key>AppVariant</key>
 	<string>release</string>
 	<key>AppURLScheme</key>

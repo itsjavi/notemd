@@ -19,6 +19,8 @@ struct MarkdownPreview: NSViewRepresentable {
     /// Source line to scroll to (split mode sync); nil leaves scrolling alone.
     var scrollLine: Int?
     var onOpenNote: ((URL) -> Void)?
+    /// Shows Transcribe links under audio embeds; receives the clip's link destination as written.
+    var onTranscribe: ((String) -> Void)?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
@@ -71,7 +73,8 @@ struct MarkdownPreview: NSViewRepresentable {
             }
             if preview.markdown != lastMarkdown {
                 lastMarkdown = preview.markdown
-                scheduleRender(preview.markdown, frontMatter: preview.frontMatter, immediate: !isPageReady && !isLoading)
+                let options = MarkdownRenderer.Options(frontMatter: preview.frontMatter, transcribeLinks: preview.onTranscribe != nil)
+                scheduleRender(preview.markdown, options: options, immediate: !isPageReady && !isLoading)
             }
             if let line = preview.scrollLine, line != lastScrollLine {
                 lastScrollLine = line
@@ -79,15 +82,16 @@ struct MarkdownPreview: NSViewRepresentable {
             }
         }
 
-        private func scheduleRender(_ markdown: String, frontMatter: MarkdownRenderer.FrontMatterStyle, immediate: Bool) {
+        private func scheduleRender(_ markdown: String, options: MarkdownRenderer.Options, immediate: Bool) {
             renderTask?.cancel()
             renderTask = Task {
                 if !immediate { try? await Task.sleep(for: .milliseconds(90)) }
                 guard !Task.isCancelled else { return }
-                let html = await Task.detached(priority: .userInitiated) {
-                    MarkdownRenderer.html(from: markdown, options: .init(frontMatter: frontMatter))
+                let (html, linkedFiles) = await Task.detached(priority: .userInitiated) {
+                    (MarkdownRenderer.html(from: markdown, options: options), LocalFileSchemeHandler.linkedAbsoluteFiles(in: markdown))
                 }.value
                 guard !Task.isCancelled else { return }
+                self.fileHandler.allowedFiles = linkedFiles
                 self.show(html)
             }
         }
@@ -157,6 +161,11 @@ struct MarkdownPreview: NSViewRepresentable {
             switch url.scheme?.lowercased() {
             case "http", "https", "mailto":
                 NSWorkspace.shared.open(url)
+            case MarkdownRenderer.actionScheme:
+                let components = URLComponents(url: url, resolvingAgainstBaseURL: false)
+                if components?.path == "transcribe", let source = components?.queryItems?.first(where: { $0.name == "src" })?.value {
+                    parent?.onTranscribe?(source)
+                }
             case LocalFileSchemeHandler.scheme:
                 guard let fileURL = fileHandler.fileURL(for: url) else { return }
                 if NoteMDCore.noteExtensions.contains(fileURL.pathExtension.lowercased()), let onOpenNote = parent?.onOpenNote {
@@ -183,10 +192,21 @@ struct MarkdownPreview: NSViewRepresentable {
     }
 }
 
-/// Serves `notemd-file://local/<absolute path>` from disk, only inside `accessRoot`.
+/// Serves `notemd-file://local/<absolute path>` from disk, only inside `accessRoot` or for files the
+/// note links by absolute path. Byte-range requests are answered so audio and video can play and seek.
 final class LocalFileSchemeHandler: NSObject, WKURLSchemeHandler {
     static let scheme = "notemd-file"
     var accessRoot: URL?
+    /// Canonical paths outside `accessRoot` that the open note links explicitly.
+    var allowedFiles: Set<String> = []
+
+    /// Canonical paths of the absolute-path links in `markdown` (attachments linked in place).
+    nonisolated static func linkedAbsoluteFiles(in markdown: String) -> Set<String> {
+        Set(MarkdownRenderer.linkDestinations(in: markdown).compactMap { destination in
+            guard destination.hasPrefix("/"), let path = destination.removingPercentEncoding else { return nil }
+            return URL(fileURLWithPath: path).canonical.path
+        })
+    }
 
     static func url(for fileURL: URL, isDirectory: Bool) -> URL? {
         var components = URLComponents()
@@ -203,7 +223,7 @@ final class LocalFileSchemeHandler: NSObject, WKURLSchemeHandler {
         let path = URLComponents(url: url, resolvingAgainstBaseURL: false)?.path ?? url.path
         let fileURL = URL(fileURLWithPath: path).canonical
         let rootPath = root.path.hasSuffix("/") ? root.path : root.path + "/"
-        guard fileURL.path.hasPrefix(rootPath) || fileURL.path == root.path else { return nil }
+        guard fileURL.path.hasPrefix(rootPath) || fileURL.path == root.path || allowedFiles.contains(fileURL.path) else { return nil }
         return fileURL
     }
 
@@ -215,10 +235,41 @@ final class LocalFileSchemeHandler: NSObject, WKURLSchemeHandler {
             return
         }
         let mime = UTType(filenameExtension: fileURL.pathExtension)?.preferredMIMEType ?? "application/octet-stream"
-        let response = URLResponse(url: url, mimeType: mime, expectedContentLength: data.count, textEncodingName: nil)
+        var headers = ["Content-Type": mime, "Accept-Ranges": "bytes"]
+        var status = 200
+        var range = 0..<data.count
+        if let header = urlSchemeTask.request.value(forHTTPHeaderField: "Range"),
+           let requested = Self.byteRange(header, size: data.count) {
+            status = 206
+            range = requested
+            headers["Content-Range"] = "bytes \(range.lowerBound)-\(range.upperBound - 1)/\(data.count)"
+        }
+        headers["Content-Length"] = String(range.count)
+        guard let response = HTTPURLResponse(url: url, statusCode: status, httpVersion: "HTTP/1.1", headerFields: headers) else {
+            urlSchemeTask.didFailWithError(URLError(.cannotParseResponse))
+            return
+        }
         urlSchemeTask.didReceive(response)
-        urlSchemeTask.didReceive(data)
+        urlSchemeTask.didReceive(data.subdata(in: range))
         urlSchemeTask.didFinish()
+    }
+
+    /// The bytes a `Range: bytes=…` header asks for (first range only); nil when it can't be satisfied.
+    static func byteRange(_ header: String, size: Int) -> Range<Int>? {
+        guard header.hasPrefix("bytes="), size > 0,
+              let spec = header.dropFirst("bytes=".count).split(separator: ",").first
+        else { return nil }
+        let parts = spec.split(separator: "-", maxSplits: 1, omittingEmptySubsequences: false)
+            .map { $0.trimmingCharacters(in: .whitespaces) }
+        guard parts.count == 2 else { return nil }
+        if parts[0].isEmpty {
+            guard let suffix = Int(parts[1]), suffix > 0 else { return nil }
+            return max(0, size - suffix)..<size
+        }
+        guard let start = Int(parts[0]), start >= 0, start < size else { return nil }
+        let end = parts[1].isEmpty ? size - 1 : min(Int(parts[1]) ?? -1, size - 1)
+        guard end >= start else { return nil }
+        return start..<(end + 1)
     }
 
     func webView(_ webView: WKWebView, stop urlSchemeTask: any WKURLSchemeTask) {}

@@ -26,6 +26,18 @@ struct SettingsView: View {
                     Toggle("Show front matter in the editor", isOn: $settings.showFrontMatter)
                 }
                 Section {
+                    Picker("Dropped or pasted files", selection: $settings.attachmentImportMode) {
+                        ForEach(AttachmentImportMode.allCases) { Text($0.title).tag($0) }
+                    }
+                    TranscriptionLanguagePicker()
+                } header: {
+                    Text("Attachments & Voice Notes")
+                } footer: {
+                    Text("Files from outside the notes folder are copied into its assets folder, or linked where they are (links aren't versioned). Voice notes are transcribed on this Mac.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section {
                     Toggle("Load remote images in previews", isOn: $settings.loadRemoteImages)
                 } header: {
                     Text("Privacy")

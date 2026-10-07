@@ -77,6 +77,9 @@ public struct GitClient: Sendable {
         for key in ["GIT_DIR", "GIT_WORK_TREE", "GIT_INDEX_FILE", "GIT_COMMON_DIR", "GIT_OBJECT_DIRECTORY", "GIT_PREFIX"] {
             result[key] = nil
         }
+        // Apps launched from Finder get a minimal PATH; git finds `git-lfs` (Homebrew) through it.
+        let path = result["PATH"] ?? "/usr/bin:/bin:/usr/sbin:/sbin"
+        result["PATH"] = (["/opt/homebrew/bin", "/usr/local/bin"] + [path]).joined(separator: ":")
         result.merge(environment) { _, new in new }
         result["GIT_TERMINAL_PROMPT"] = "0"
         result["GIT_PAGER"] = "cat"
@@ -136,14 +139,36 @@ public struct GitClient: Sendable {
         return true
     }
 
+    // MARK: Git LFS
+
+    /// Whether `git lfs` is available.
+    public func isLFSInstalled() async -> Bool {
+        (try? await execute(["lfs", "version"]))?.status == 0
+    }
+
+    /// Configures LFS for this repository only and tracks `pattern` with it in `.gitattributes`
+    /// (keeping existing rules). Safe to call repeatedly.
+    public func enableLFS(tracking pattern: String) async throws {
+        if (try await execute(["lfs", "install", "--local"])).status != 0 {
+            // Usually a foreign hook already in place: keep it and only set up the filters.
+            try await run(["lfs", "install", "--local", "--skip-repo"])
+        }
+        let url = repositoryURL.appending(path: ".gitattributes", directoryHint: .notDirectory)
+        let existing = (try? String(contentsOf: url, encoding: .utf8)) ?? ""
+        if let updated = GitAttributes.addingLFSTracking(pattern, to: existing) {
+            try SafeFileWriter.write(Data(updated.utf8), to: url)
+        }
+    }
+
     // MARK: Committing
 
-    /// Stages everything (`git add -A`) and commits it if anything is staged. Returns nil when there was
-    /// nothing to commit. Hooks and signing are disabled so background commits never prompt or block;
-    /// the author falls back to `NoteMD <notemd@localhost>` when no git identity is configured.
+    /// Stages everything (`git add -A`) except `excluded` paths and commits it if anything is staged.
+    /// Returns nil when there was nothing to commit. Hooks and signing are disabled so background commits
+    /// never prompt or block; the author falls back to `NoteMD <notemd@localhost>` when no git identity is configured.
     @discardableResult
-    public func commitAll(message: String? = nil) async throws -> GitCommit? {
-        try await run(["add", "--all"])
+    public func commitAll(message: String? = nil, excluding excluded: [String] = []) async throws -> GitCommit? {
+        // icase: on case-insensitive volumes `Assets/` is the same folder as `assets/`.
+        try await run(["add", "--all", "--", "."] + excluded.map { ":(exclude,icase)\($0)" })
         let staged = try await statusRecords().filter(\.isStaged).map(\.entry)
         guard !staged.isEmpty else { return nil }
 

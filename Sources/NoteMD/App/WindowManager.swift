@@ -98,13 +98,19 @@ import SwiftUI
         if let store { switchRepository(of: store, to: url) } else { openRepository(url) }
     }
 
-    /// Opens a file: notes inside an open repository are selected there; anything else opens as a document.
-    func openFile(_ url: URL) {
+    enum OpenOutcome {
+        case repository, note, document, attachment, failed
+    }
+
+    /// Opens a file: folders as repositories, notes inside an open repository are selected there, text files
+    /// open as documents, and anything else becomes a new note embedding it in the most recent repository.
+    @discardableResult
+    func openFile(_ url: URL) -> OpenOutcome {
         let url = url.canonical
         var isDirectory: ObjCBool = false
         if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
             openRepository(url)
-            return
+            return .repository
         }
         if NoteMDCore.noteExtensions.contains(url.pathExtension.lowercased()),
            let controller = controllers.first(where: { url.path.hasPrefix($0.store.rootURL.path + "/") }) {
@@ -114,13 +120,55 @@ import SwiftUI
                 store.sidebarSelection = .allNotes
                 store.selectedNoteID = path
                 present(controller.window)
-                return
+                return .note
             }
+        }
+        if FileManager.default.fileExists(atPath: url.path), !TextDetection.isText(at: url) {
+            return addToNotes([url]) ? .attachment : .failed
         }
         NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, error in
             if let error { MainActor.assumeIsolated { _ = NSApp.presentError(error) } }
         }
         closeWelcome()
+        return .document
+    }
+
+    /// The repository files from other apps go to: the last focused window, else the most recent repository.
+    func destinationStore() -> RepositoryStore? {
+        if let store = activeStore ?? controllers.last?.store { return store }
+        let recent = AppSettings.shared.recentRepositories.map(PathDisplay.expand)
+            .first { FileManager.default.fileExists(atPath: $0.path) }
+        guard let recent else { return nil }
+        openRepository(recent)
+        return activeStore
+    }
+
+    /// New notes embedding `files` (copied into assets) in the destination repository.
+    @discardableResult
+    func addToNotes(_ files: [URL]) -> Bool {
+        guard let store = destinationStore() else {
+            presentError("Open a notes folder first to add “\(files.first?.lastPathComponent ?? "the file")” to a note.")
+            showWelcome()
+            return false
+        }
+        store.addNotes(embedding: files)
+        if let controller = controllers.first(where: { $0.store === store }) { present(controller.window) }
+        return true
+    }
+
+    /// Services menu: a new note from the selection in another app.
+    func addNoteFromService(_ pasteboard: NSPasteboard) {
+        let files = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        let web = files.isEmpty ? (pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] ?? []) : []
+        let text = pasteboard.string(forType: .string) ?? web.first?.absoluteString
+        let image = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff)
+        guard let store = destinationStore() else {
+            presentError("Open a notes folder first to create notes from other apps.")
+            showWelcome()
+            return
+        }
+        store.addNote(text: files.isEmpty ? text : nil, files: files, imageData: image)
+        if let controller = controllers.first(where: { $0.store === store }) { present(controller.window) }
     }
 
     func showOpenPanel() {
@@ -130,7 +178,7 @@ import SwiftUI
         panel.allowsMultipleSelection = true
         panel.message = "Open a notes folder, or a Markdown or text file."
         guard panel.runModal() == .OK else { return }
-        panel.urls.forEach(openFile)
+        for url in panel.urls { openFile(url) }
     }
 
     // MARK: Windows

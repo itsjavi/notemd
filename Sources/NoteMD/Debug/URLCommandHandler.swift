@@ -1,3 +1,4 @@
+import AVFoundation
 import AppKit
 import NoteMDCore
 
@@ -83,6 +84,8 @@ enum DebugHooks {
             guard let store else { return }
             let path = query["path"] ?? store.editor?.path ?? ""
             switch query["name"] {
+            case "transcribe": store.sheet = .transcribe(path: path, source: query["src"] ?? "")
+            case "recorder": store.showsVoiceRecorder = true
             case "history": store.sheet = .history(path: path)
             case "form": store.sheet = .templateForm(path: path)
             case "params": store.sheet = .templateParameters(path: path)
@@ -142,6 +145,53 @@ enum DebugHooks {
             case "text": textView.insertText(query["text"] ?? "", replacementRange: textView.selectedRange())
             default: break
             }
+        case "ui/attachment-mode":
+            if let mode = AttachmentImportMode(rawValue: query["value"] ?? "") { AppSettings.shared.attachmentImportMode = mode }
+        case "ui/drop-files", "ui/paste-file", "ui/paste-image":
+            // Same entry points as a real drop or ⌘V, without touching the user's pasteboard.
+            guard let textView = editorTextView(query) else { return }
+            let paths = (query["paths"] ?? query["path"] ?? "").split(separator: ",").map(String.init)
+            let urls = paths.compactMap { safePath($0) }.map { URL(fileURLWithPath: $0) }
+            guard urls.count == paths.count, !urls.isEmpty else { return }
+            if query["select"] == "end" { textView.setSelectedRange(NSRange(location: (textView.string as NSString).length, length: 0)) }
+            switch verb {
+            case "ui/paste-image": if let data = try? Data(contentsOf: urls[0]) { textView.pasteImageData(data) }
+            case "ui/paste-file": textView.insertAttachments([urls[0]], at: textView.selectedRange())
+            default: textView.insertAttachments(urls, at: textView.selectedRange())
+            }
+        case "ui/voice-start":
+            // The recorder's real start/stop path, with the microphone replaced by a clip copied from
+            // `from` or a generated tone of `seconds`.
+            let source = query["from"].flatMap { safePath($0) }.map { URL(fileURLWithPath: $0) }
+            let recorder = query["target"] == "document" ? debugDocument?.model.voiceRecorder : store?.voiceRecorder
+            recorder?.simulatedClip = { url in makeClip(at: url, from: source, query: query) }
+            if query["target"] == "document" { debugDocument?.model.startVoiceNote() } else { store?.startVoiceNote() }
+        case "ui/voice-stop", "ui/voice-cancel":
+            let recorder = query["target"] == "document" ? debugDocument?.model.voiceRecorder : store?.voiceRecorder
+            if verb == "ui/voice-stop" { recorder?.stop() } else { recorder?.cancel() }
+        case "ui/transcribe":
+            guard let store, let editor = store.editor, let source = query["src"],
+                  let audio = store.audioURL(forSource: source, inNoteAt: editor.path)
+            else { return }
+            let path = editor.path
+            let locale = Locale(identifier: query["lang"] ?? "en-US")
+            Task {
+                do {
+                    let text = try await Transcriber.transcribe(audio, locale: locale)
+                    store.insertTranscript(text, forSource: source, inNoteAt: path)
+                } catch {
+                    store.errorMessage = "transcribe: \(error.localizedDescription)"
+                }
+            }
+        case "ui/service-note":
+            // A private pasteboard stands in for the Services selection.
+            let pasteboard = NSPasteboard(name: NSPasteboard.Name("NoteMDTestServices"))
+            pasteboard.clearContents()
+            if let text = query["text"] { pasteboard.setString(text, forType: .string) }
+            if let file = query["file"].flatMap({ safePath($0) }) { pasteboard.writeObjects([URL(fileURLWithPath: file) as NSURL]) }
+            windows.addNoteFromService(pasteboard)
+        case "ui/lfs-check":
+            if let store { Task { await store.configureAssetVersioning() } }
         case "ui/commit-now":
             if let store { Task { await store.saveVersionNow() } }
         case "ui/window-size":
@@ -156,6 +206,38 @@ enum DebugHooks {
             if let path = safePath(query["out"]) { try? stateDump().write(toFile: path, atomically: true, encoding: .utf8) }
         default:
             break
+        }
+    }
+
+    private static var debugDocument: TextFileDocument? {
+        NSDocumentController.shared.documents.first as? TextFileDocument
+    }
+
+    /// The editor of the repository window, or of the first document with `target=document`.
+    private static func editorTextView(_ query: [String: String]) -> MarkdownTextView? {
+        let windowsToSearch: [NSWindow] = query["target"] == "document"
+            ? NSDocumentController.shared.documents.flatMap { $0.windowControllers.compactMap(\.window) }
+            : (store.flatMap { s in windows.controllers.first { $0.store === s }?.window }.map { [$0] } ?? [])
+        return windowsToSearch.lazy.compactMap { $0.contentView.flatMap(findTextView) }.first
+    }
+
+    /// Copies `source` to `url`, or writes a short 440 Hz tone (`seconds`, default 1).
+    private static func makeClip(at url: URL, from source: URL?, query: [String: String]) -> Bool {
+        if let source { return (try? FileManager.default.copyItem(at: source, to: url)) != nil }
+        let seconds = Double(query["seconds"] ?? "") ?? 1
+        guard let format = AVAudioFormat(standardFormatWithSampleRate: 44_100, channels: 1),
+              let buffer = AVAudioPCMBuffer(pcmFormat: format, frameCapacity: AVAudioFrameCount(seconds * 44_100)),
+              let samples = buffer.floatChannelData?[0]
+        else { return false }
+        buffer.frameLength = buffer.frameCapacity
+        for index in 0..<Int(buffer.frameLength) { samples[index] = 0.3 * sin(2 * .pi * 440 * Float(index) / 44_100) }
+        do {
+            let settings: [String: Any] = [AVFormatIDKey: kAudioFormatMPEG4AAC, AVSampleRateKey: 44_100, AVNumberOfChannelsKey: 1]
+            let file = try AVAudioFile(forWriting: url, settings: settings, commonFormat: .pcmFormatFloat32, interleaved: false)
+            try file.write(from: buffer)
+            return true
+        } catch {
+            return false
         }
     }
 
@@ -194,6 +276,8 @@ enum DebugHooks {
             lines.append("selected: \(store.selectedNoteID ?? "-")")
             lines.append("sheet: \(store.sheet?.id ?? "-")")
             lines.append("git: \(store.gitState)")
+            lines.append("lfsMissing: \(store.lfsMissing)")
+            lines.append("recording: \(store.voiceRecorder.isRecording)")
             lines.append("error: \(store.errorMessage ?? "-")")
             if let editor = store.editor {
                 lines.append("editor.path: \(editor.path)")
@@ -201,8 +285,13 @@ enum DebugHooks {
                 lines.append("editor.dirty: \(editor.isDirty)")
                 lines.append("editor.tags: \(editor.tags)")
                 lines.append("editor.params: \(editor.parameters.map { "\($0.name):\($0.type.rawValue)" })")
+                lines.append("editor.text: \(editor.fullText.prefix(4000).debugDescription)")
             }
         }
+        if let document = NSDocumentController.shared.documents.first as? TextFileDocument {
+            lines.append("document.text: \(document.model.text.prefix(4000).debugDescription)")
+        }
+        lines.append("attachmentMode: \(AppSettings.shared.attachmentImportMode.rawValue)")
         lines.append("mode: \(AppSettings.shared.editorMode.rawValue)")
         return lines.joined(separator: "\n") + "\n"
     }

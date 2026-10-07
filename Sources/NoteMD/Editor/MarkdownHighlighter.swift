@@ -48,7 +48,8 @@ struct MarkdownHighlighter {
     private static let italic = regex(#"(?<![\*_\w\\])([*_])(?=[^\s*_])(.+?)(?<=[^\s*_])\1(?![\*_\w])"#)
     private static let strike = regex(#"~~(?=\S)(.+?)(?<=\S)~~"#)
     private static let inlineCode = regex(#"(`+)(?!`)(.+?)(?<!`)\1(?!`)"#)
-    private static let link = regex(#"(!?)\[([^\]\n]*)\]\(([^)\n]*)\)"#)
+    /// Links, `![image](…)` and `+[media embed](…)`.
+    private static let link = regex(#"(?<!\\)([!+]?)\[([^\]\n]*)\]\(([^)\n]*)\)"#)
     private static let autolink = regex(#"<(https?://[^>\s]+)>|(?<![(\[<"'=])\bhttps?://[^\s<>()\[\]]+[^\s<>()\[\].,;:!?'"]"#)
     private static let quote = regex(#"^[ \t]{0,3}(>+)[^\n]*$"#)
     private static let listMarker = regex(#"^[ \t]*([-*+]|\d{1,9}[.)])[ \t]+(\[[ xX]\][ \t]+)?"#)

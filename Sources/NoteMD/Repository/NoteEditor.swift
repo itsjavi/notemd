@@ -20,6 +20,8 @@ import Observation
     @ObservationIgnored private var saveWork: DispatchWorkItem?
     /// Set for freshly created notes so the editor takes keyboard focus once.
     @ObservationIgnored var wantsFocus = false
+    /// The on-screen text view, for insertions that should be undoable (voice notes, transcripts).
+    @ObservationIgnored let textBridge = EditorTextBridge()
     @ObservationIgnored var onSave: ((NoteEditor) -> Void)?
     @ObservationIgnored var onSaveError: ((Error) -> Void)?
 
@@ -33,6 +35,10 @@ import Observation
     }
 
     var fullText: String { markdown.text }
+    /// UTF-16 length of the hidden front matter: editor offsets plus this are full-text offsets.
+    var hiddenPrefixLength: Int {
+        showsFrontMatter ? 0 : (fullText as NSString).length - (editorText as NSString).length
+    }
     var tags: [String] { markdown.frontMatter?.tags ?? [] }
     var parameters: [TemplateParameter] { markdown.frontMatter?.parameters ?? [] }
     var isTemplate: Bool { markdown.frontMatter?.isTemplate ?? false }

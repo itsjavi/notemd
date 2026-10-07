@@ -99,8 +99,8 @@ public enum NoteTitle {
 
     static func stripInlineMarkup(_ text: String) -> String {
         var result = text
-        // Images and links: keep the label.
-        result = result.replacingOccurrences(of: #"!?\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
+        // Images, media embeds and links: keep the label.
+        result = result.replacingOccurrences(of: #"(?<!\\)[!+]?\[([^\]]*)\]\([^)]*\)"#, with: "$1", options: .regularExpression)
         result = result.replacingOccurrences(of: #"(\*\*|__|~~|`)"#, with: "", options: .regularExpression)
         result = result.replacingOccurrences(of: #"(?<![\w*])[*_](?=\S)([^*_]+)(?<=\S)[*_](?![\w*])"#, with: "$1", options: .regularExpression)
         return result
