@@ -16,8 +16,8 @@
       "appearance": "dark",
       "value": {
         "linear-gradient": [
-          "extended-srgb:0.05882,0.34118,0.34118,1.00000",
-          "extended-srgb:0.01569,0.10980,0.14118,1.00000"
+          "extended-srgb:0.09804,0.55294,0.53725,1.00000",
+          "extended-srgb:0.03529,0.23529,0.29020,1.00000"
         ],
         "orientation": {
           "start": { "x": 0.2, "y": 0 },

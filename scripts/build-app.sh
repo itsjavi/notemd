@@ -42,7 +42,8 @@ fi
 # App icon (Icon Composer .icon -> Assets.car + AppIcon.icns).
 if [[ -d Resources/AppIcon.icon ]]; then
   ICON_DIR="$(mktemp -d)"
-  xcrun actool Resources/AppIcon.icon --compile "$APP/Contents/Resources" --app-icon AppIcon \
+  # Absolute paths: actool can resolve relative ones against another project's directory.
+  xcrun actool "$PWD/Resources/AppIcon.icon" --compile "$PWD/$APP/Contents/Resources" --app-icon AppIcon \
     --platform macosx --target-device mac --minimum-deployment-target 26.0 \
     --output-partial-info-plist "$ICON_DIR/icon.plist" --errors --warnings >/dev/null
   /usr/libexec/PlistBuddy -c "Merge $ICON_DIR/icon.plist" "$PLIST"
