@@ -23,7 +23,8 @@ public enum SafeFileWriter {
     public static func write(_ data: Data, to url: URL) throws {
         let fileManager = FileManager.default
         guard fileManager.fileExists(atPath: url.path) else {
-            try data.write(to: url, options: [.atomic, .withoutOverwriting])
+            // Foundation traps on `.atomic` combined with `.withoutOverwriting`.
+            try data.write(to: url, options: .withoutOverwriting)
             return
         }
         let directory = try fileManager.url(for: .itemReplacementDirectory, in: .userDomainMask, appropriateFor: url, create: true)

@@ -157,6 +157,13 @@ import Testing
         #expect(try String(contentsOf: url, encoding: .utf8) == "two")
     }
 
+    @Test func safeWriterCreatesNewFiles() throws {
+        let url = FileManager.default.temporaryDirectory.appendingPathComponent("notemd-new-\(UUID().uuidString).md")
+        defer { try? FileManager.default.removeItem(at: url) }
+        try SafeFileWriter.write(Data("new".utf8), to: url)
+        #expect(try String(contentsOf: url, encoding: .utf8) == "new")
+    }
+
     @Test func safeRelativePaths() {
         #expect(SafeFileWriter.isSafeRelativePath("Work/Plan.md"))
         #expect(SafeFileWriter.isSafeRelativePath(""))
