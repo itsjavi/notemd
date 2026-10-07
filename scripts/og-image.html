@@ -1,0 +1,89 @@
+<!doctype html>
+<!--
+  Source of web/assets/og-image.jpg (1200x630 card rendered at 2x). Re-render to PNG, then convert:
+  "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome" --headless=new --hide-scrollbars \
+    --force-device-scale-factor=2 --window-size=1200,630 \
+    --screenshot=/tmp/og.png "file://$PWD/scripts/og-image.html"
+  sips -s format jpeg -s formatOptions 86 /tmp/og.png --out web/assets/og-image.jpg
+-->
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>NoteMD social card</title>
+    <style>
+      html,
+      body {
+        margin: 0;
+        width: 1200px;
+        height: 630px;
+        overflow: hidden;
+      }
+
+      body {
+        position: relative;
+        display: flex;
+        flex-direction: column;
+        align-items: center;
+        background:
+          radial-gradient(60% 55% at 50% 78%, rgb(44 154 147 / 0.32), transparent),
+          radial-gradient(40% 40% at 50% 0%, rgb(44 154 147 / 0.14), transparent), #0d1517;
+        color: #e8eeed;
+        font-family: -apple-system, BlinkMacSystemFont, "SF Pro Display", system-ui, sans-serif;
+        text-align: center;
+        -webkit-font-smoothing: antialiased;
+      }
+
+      .icon {
+        width: 76px;
+        height: 76px;
+        margin-top: 40px;
+        filter: drop-shadow(0 10px 18px rgb(0 0 0 / 0.5));
+      }
+
+      .pill {
+        margin: 16px 0 0;
+        padding: 3px 12px;
+        border: 1px solid #24363b;
+        border-radius: 999px;
+        background: #152226;
+        color: #a0afad;
+        font-size: 15px;
+      }
+
+      h1 {
+        margin: 14px 0 0;
+        font-size: 58px;
+        line-height: 1.04;
+        letter-spacing: -0.035em;
+        font-weight: 700;
+      }
+
+      p.lead {
+        max-width: 780px;
+        margin: 16px 0 0;
+        color: #a0afad;
+        font-size: 21px;
+        line-height: 1.45;
+      }
+
+      .shot {
+        position: absolute;
+        left: 50%;
+        top: 418px;
+        width: 1040px;
+        transform: translateX(-50%);
+        filter: drop-shadow(0 -6px 40px rgb(0 0 0 / 0.55));
+      }
+    </style>
+  </head>
+  <body>
+    <img class="icon" src="../web/assets/icon.png" alt="" />
+    <p class="pill">Free &amp; open source · Native on macOS 26</p>
+    <h1>Markdown notes,<br />versioned automatically.</h1>
+    <p class="lead">
+      Plain Markdown files in multiple vaults, a git history of every edit, reusable prompt
+      templates, voice notes, and a text editor for everything else.
+    </p>
+    <img class="shot" src="../web/assets/screenshot-dark.webp" alt="" />
+  </body>
+</html>

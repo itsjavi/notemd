@@ -1,0 +1,441 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>NoteMD: Markdown notes, versioned automatically</title>
+    <meta
+      name="description"
+      content="A native macOS app for plain Markdown notes: multiple vaults, automatic git history, reusable prompt templates, voice notes and a fast standalone text editor. Free and open source."
+    />
+    <link rel="canonical" href="https://itsjavi.github.io/notemd/" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="theme-color" content="#f6f5f1" media="(prefers-color-scheme: light)" />
+    <meta name="theme-color" content="#0d1517" media="(prefers-color-scheme: dark)" />
+    <link rel="icon" type="image/png" href="assets/favicon.png" />
+    <link rel="apple-touch-icon" href="assets/apple-touch-icon.png" />
+
+    <meta property="og:type" content="website" />
+    <meta property="og:site_name" content="NoteMD" />
+    <meta property="og:locale" content="en_US" />
+    <meta property="og:url" content="https://itsjavi.github.io/notemd/" />
+    <meta property="og:title" content="NoteMD: Markdown notes, versioned automatically" />
+    <meta
+      property="og:description"
+      content="A native Mac app for plain Markdown files: multiple vaults, a git history of every edit, reusable prompt templates, voice notes and a text editor. Free and open source."
+    />
+    <meta property="og:image" content="https://itsjavi.github.io/notemd/assets/og-image.jpg" />
+    <meta property="og:image:type" content="image/jpeg" />
+    <meta property="og:image:width" content="2400" />
+    <meta property="og:image:height" content="1260" />
+    <meta
+      property="og:image:alt"
+      content="NoteMD app icon above the headline “Markdown notes, versioned automatically.” and the app window in dark mode"
+    />
+    <meta name="twitter:card" content="summary_large_image" />
+    <meta name="twitter:title" content="NoteMD: Markdown notes, versioned automatically" />
+    <meta
+      name="twitter:description"
+      content="Plain Markdown files, multiple vaults, automatic git history, prompt templates, voice notes and a text editor for macOS. Free and open source."
+    />
+    <meta name="twitter:image" content="https://itsjavi.github.io/notemd/assets/og-image.jpg" />
+    <meta
+      name="twitter:image:alt"
+      content="NoteMD app icon above the headline “Markdown notes, versioned automatically.” and the app window in dark mode"
+    />
+
+    <script type="application/ld+json">
+      {
+        "@context": "https://schema.org",
+        "@type": "SoftwareApplication",
+        "name": "NoteMD",
+        "applicationCategory": "ProductivityApplication",
+        "operatingSystem": "macOS 26",
+        "description": "A native macOS note-taking app and text editor for plain Markdown files, with automatic git versioning.",
+        "url": "https://itsjavi.github.io/notemd/",
+        "license": "https://opensource.org/licenses/MIT",
+        "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
+      }
+    </script>
+
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <a class="skip-link" href="#main">Skip to content</a>
+
+    <header class="site-header">
+      <div class="container header-inner">
+        <a class="brand" href="./" aria-label="NoteMD home">
+          <img src="assets/icon.png" width="32" height="32" alt="" />
+          <span>NoteMD</span>
+        </a>
+        <nav aria-label="Main">
+          <ul class="nav-links">
+            <li><a href="#why">Why</a></li>
+            <li><a href="#features">Features</a></li>
+            <li><a href="#get">Get it</a></li>
+            <li>
+              <a class="nav-github" href="https://github.com/itsjavi/notemd">
+                <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16">
+                  <path
+                    fill="currentColor"
+                    d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0016 8c0-4.42-3.58-8-8-8z"
+                  />
+                </svg>
+                GitHub
+              </a>
+            </li>
+          </ul>
+        </nav>
+      </div>
+    </header>
+
+    <main id="main">
+      <section class="hero">
+        <div class="container hero-copy">
+          <img
+            class="hero-icon"
+            src="assets/icon.png"
+            width="112"
+            height="112"
+            alt="NoteMD app icon"
+          />
+          <p class="pill">Free &amp; open source · Native on macOS 26</p>
+          <h1>Markdown notes, <br />versioned automatically.</h1>
+          <p class="lead">
+            NoteMD is a native Mac app for plain Markdown files. Keep as many vaults as you like,
+            get a git history of every edit for free, turn notes into reusable prompt templates,
+            record voice notes, and edit any text file on your Mac.
+          </p>
+          <div class="actions">
+            <a class="button button-primary" href="https://github.com/itsjavi/notemd"
+              >View on GitHub</a
+            >
+            <a class="button button-secondary" href="#get">Build it yourself</a>
+          </div>
+          <p class="fineprint">macOS 26 on Apple silicon · MIT licensed</p>
+        </div>
+        <div class="container hero-shot">
+          <a href="assets/screenshot-light.webp" data-lightbox>
+            <picture>
+              <source srcset="assets/screenshot-dark.webp" media="(prefers-color-scheme: dark)" />
+              <img
+                src="assets/screenshot-light.webp"
+                width="2400"
+                height="1480"
+                alt="The NoteMD window: colored folders and tags in the sidebar, the note list, and a roadmap note shown as Markdown source next to its rendered preview with a task list, an alert and a table."
+                fetchpriority="high"
+              />
+            </picture>
+          </a>
+        </div>
+      </section>
+
+      <section id="why" class="section why">
+        <div class="container why-grid">
+          <div>
+            <p class="eyebrow"><span aria-hidden="true">##</span> Why</p>
+            <h2>A simpler place for notes, prompts and plain text.</h2>
+            <p class="section-lead">
+              NoteMD started as a personal itch. Here is the short version, written the way it would
+              be in the app.
+            </p>
+          </div>
+          <article class="note-card" aria-label="Why I built NoteMD">
+            <div class="note-chrome" aria-hidden="true">
+              <span></span><span></span><span></span>
+            </div>
+            <div class="note-body">
+              <h3><span class="md" aria-hidden="true"># </span>Why I built NoteMD</h3>
+              <p>
+                I wanted a <strong>simpler note-taking app</strong>: plain Markdown files, several
+                separate vaults, and every change versioned with git without having to think about
+                it.
+              </p>
+              <p>
+                I also kept rewriting the same AI prompts, so I added <strong>templates</strong>:
+                put parameters in a note, fill in a form, copy the result. Voice notes and video
+                reviews came next, because some thoughts are faster to say or show than to type.
+              </p>
+              <p>
+                And while I was at it, a proper editor for every other text file on my Mac. Goodbye,
+                TextEdit.
+              </p>
+              <ul class="tasks">
+                <li>Plain Markdown files, no lock-in</li>
+                <li>Multiple vaults, one window each</li>
+                <li>Automatic git history</li>
+                <li>Reusable prompt templates</li>
+                <li>Voice notes and video reviews</li>
+                <li>A text editor for everything else</li>
+              </ul>
+              <p class="signature">Javi, author of NoteMD</p>
+            </div>
+          </article>
+        </div>
+      </section>
+
+      <section id="features" class="section features" aria-labelledby="features-title">
+        <div class="container">
+          <p class="eyebrow"><span aria-hidden="true">##</span> Features</p>
+          <h2 id="features-title">Everything is a file. Every edit is kept.</h2>
+
+          <div class="feature">
+            <div class="feature-copy">
+              <h3>Every edit, safely in git</h3>
+              <p>
+                Each vault is a git repository. NoteMD saves as you type and commits a few seconds
+                after you stop, and again when you close the window, quit, or press <kbd>⌘S</kbd>.
+              </p>
+              <p>
+                Version History shows what changed in each version, compares any of them with the
+                current text, and restores one as a new commit. Deleted notes can come back too.
+              </p>
+            </div>
+            <a class="feature-shot" data-lightbox href="assets/version-history.webp">
+              <img
+                src="assets/version-history.webp"
+                width="1600"
+                height="1000"
+                loading="lazy"
+                alt="Version History sheet listing a note's versions by date, with a diff of the lines added in the selected version."
+              />
+            </a>
+          </div>
+
+          <div class="feature">
+            <div class="feature-copy">
+              <h3>Reusable prompts, as forms</h3>
+              <p>
+                Add <code>params</code> to a note's front matter and write
+                <code>{{placeholders}}</code>, with <code>{{#if}}</code>,
+                <code>{{#unless}}</code> and <code>{{#each}}</code> blocks.
+              </p>
+              <p>
+                <em>Use Template</em> opens a form with ten field types (text, long text, number,
+                toggle, choice, multiple choice, file, folder, date and list) and gives you the
+                result to copy or save as a note. Made for the AI prompts you keep rewriting.
+              </p>
+            </div>
+            <a class="feature-shot" data-lightbox href="assets/template-form.webp">
+              <img
+                src="assets/template-form.webp"
+                width="1600"
+                height="1000"
+                loading="lazy"
+                alt="Template form for a code review prompt with text, choice, multiple choice, list and toggle fields, and the rendered prompt next to it."
+              />
+            </a>
+          </div>
+
+          <div class="feature">
+            <div class="feature-copy">
+              <h3>Voice notes, transcribed on your Mac</h3>
+              <p>
+                Record straight into a note. The clip is saved in the vault's
+                <code>assets/</code> folder and plays right in the preview.
+              </p>
+              <p>
+                Transcribe it with on-device speech recognition: the text is added under the clip as
+                a quote, and the audio never leaves your Mac.
+              </p>
+            </div>
+            <a class="feature-shot" data-lightbox href="assets/voice-note.webp">
+              <img
+                src="assets/voice-note.webp"
+                width="1600"
+                height="1000"
+                loading="lazy"
+                alt="A note with an embedded audio player for a voice note and its transcript quoted below."
+              />
+            </a>
+          </div>
+
+          <div class="feature">
+            <div class="feature-copy">
+              <h3>Video reviews and attachments</h3>
+              <p>
+                Drag or paste images, screen recordings and other files into a note. NoteMD copies
+                them into
+                <code>assets/</code> or links them where they are, and audio and video play inline
+                in the preview.
+              </p>
+              <p>
+                Keep time-stamped feedback next to the recording for quick design and code reviews.
+                Attachments are stored with Git LFS, so history stays light.
+              </p>
+            </div>
+            <a class="feature-shot" data-lightbox href="assets/video-review.webp">
+              <img
+                src="assets/video-review.webp"
+                width="1600"
+                height="1000"
+                loading="lazy"
+                alt="A review note with an embedded video player and time-stamped feedback bullets below it."
+              />
+            </a>
+          </div>
+
+          <div class="feature">
+            <div class="feature-copy">
+              <h3>Goodbye, TextEdit</h3>
+              <p>
+                Open any text file from Finder: <code>.md</code>, <code>.txt</code>,
+                <code>.env.example</code>, code or config, whatever the extension. Markdown gets the
+                editor and live preview; everything else opens as plain text.
+              </p>
+              <p>
+                NoteMD shows up under <em>Open With</em> without taking over your default apps, and
+                indents with tabs or spaces, as you prefer.
+              </p>
+            </div>
+            <a class="feature-shot feature-shot-fade" data-lightbox href="assets/text-editor.webp">
+              <img
+                src="assets/text-editor.webp"
+                width="1600"
+                height="817"
+                loading="lazy"
+                alt="A plain text file open in NoteMD's standalone editor with a monospaced font."
+              />
+            </a>
+          </div>
+        </div>
+      </section>
+
+      <section class="section details" aria-labelledby="details-title">
+        <div class="container">
+          <p class="eyebrow"><span aria-hidden="true">##</span> Details</p>
+          <h2 id="details-title">And the small things that add up.</h2>
+          <ul class="detail-grid">
+            <li>
+              <h3>Your files, your folders</h3>
+              <p>
+                Any folder can be a vault. Open several at once, each in its own window, and switch
+                between recent ones.
+              </p>
+            </li>
+            <li>
+              <h3>Folders, tags, search</h3>
+              <p>
+                Give folders a color and an icon, tag notes in front matter, and search with
+                <code>tag:name</code> or <code>#name</code> filters.
+              </p>
+            </li>
+            <li>
+              <h3>GitHub Flavored Markdown</h3>
+              <p>
+                Tables, task lists, footnotes, alerts and autolinks, rendered by cmark-gfm, GitHub's
+                own engine.
+              </p>
+            </li>
+            <li>
+              <h3>Editor, Split, Preview</h3>
+              <p>
+                Write, read, or both side by side. Switch with <kbd>⌘1</kbd>, <kbd>⌘2</kbd> and
+                <kbd>⌘3</kbd>.
+              </p>
+            </li>
+            <li>
+              <h3>Notes from anywhere</h3>
+              <p>
+                Send text and files from other apps through the Services menu, the Dock icon, drag
+                and drop, or paste.
+              </p>
+            </li>
+            <li>
+              <h3>Native and portable</h3>
+              <p>
+                SwiftUI and AppKit, light and dark. No database, no proprietary format: just a
+                folder and a git repository.
+              </p>
+            </li>
+          </ul>
+        </div>
+      </section>
+
+      <section id="get" class="section get" aria-labelledby="get-title">
+        <div class="container get-inner">
+          <div>
+            <p class="eyebrow"><span aria-hidden="true">##</span> Get it</p>
+            <h2 id="get-title">Build NoteMD in a minute.</h2>
+            <p class="section-lead">
+              You need macOS 26 on Apple silicon, Xcode 26, <code>git</code>, and
+              <code>git-lfs</code> for attachments. <code>make install</code> builds the release app
+              and copies it to <code>/Applications</code>.
+            </p>
+          </div>
+          <div class="code-block">
+            <button class="copy-button" type="button" data-copy-target="install-commands">
+              Copy
+            </button>
+            <pre><code id="install-commands">git clone https://github.com/itsjavi/notemd.git
+cd notemd
+make install</code></pre>
+          </div>
+        </div>
+      </section>
+    </main>
+
+    <footer class="site-footer">
+      <div class="container footer-inner">
+        <p>
+          <img src="assets/icon.png" width="20" height="20" alt="" />
+          <span
+            >NoteMD is open source under the
+            <a href="https://github.com/itsjavi/notemd/blob/main/LICENSE">MIT License</a>.</span
+          >
+        </p>
+        <ul class="footer-links">
+          <li><a href="https://github.com/itsjavi/notemd">Source</a></li>
+          <li><a href="https://github.com/itsjavi/notemd/issues">Issues</a></li>
+        </ul>
+      </div>
+    </footer>
+
+    <dialog class="lightbox" aria-label="Screenshot">
+      <button class="lightbox-close" type="button" aria-label="Close">
+        <svg aria-hidden="true" viewBox="0 0 16 16" width="16" height="16">
+          <path
+            d="M3 3l10 10M13 3L3 13"
+            stroke="currentColor"
+            stroke-width="1.8"
+            stroke-linecap="round"
+          />
+        </svg>
+      </button>
+      <img alt="" />
+    </dialog>
+
+    <script>
+      // Screenshots open in an overlay instead of navigating away; the links still work without JavaScript.
+      const lightbox = document.querySelector(".lightbox");
+      const lightboxImage = lightbox.querySelector("img");
+      for (const link of document.querySelectorAll("[data-lightbox]")) {
+        link.addEventListener("click", (event) => {
+          event.preventDefault();
+          const image = link.querySelector("img");
+          lightboxImage.src = image.currentSrc || image.src;
+          lightboxImage.alt = image.alt;
+          lightbox.showModal();
+        });
+      }
+      // Any click closes it, like Quick Look; Esc works natively.
+      lightbox.addEventListener("click", () => lightbox.close());
+
+      for (const button of document.querySelectorAll("[data-copy-target]")) {
+        button.addEventListener("click", async () => {
+          const target = document.getElementById(button.dataset.copyTarget);
+          try {
+            await navigator.clipboard.writeText(target.textContent);
+            button.textContent = "Copied";
+          } catch {
+            // Clipboard unavailable: select the commands so ⌘C copies them.
+            getSelection().selectAllChildren(target);
+            button.textContent = "Press ⌘C";
+          }
+          setTimeout(() => (button.textContent = "Copy"), 2000);
+        });
+      }
+    </script>
+  </body>
+</html>
