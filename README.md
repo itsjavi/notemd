@@ -43,8 +43,11 @@ And while I was at it, a proper editor for every other text file on my Mac. Good
   when you close the window, on quit and with ⌘S. Version History shows what changed in each version, compares any of
   them with the current text and restores one as a new commit. Deleted notes can be restored too.
 - **Templates for reusable prompts.** Add `params` to a note's front matter and use `{{name}}` placeholders, plus
-  `{{#if}}`, `{{#unless}}` and `{{#each}}` blocks. _Use Template_ opens a form (text, long text, number, toggle, choice,
-  multiple choice, file, folder, date and list fields) and gives you the result to copy or save as a note.
+  `{{#if}}`, `{{#elseif}}`, `{{#unless}}` and `{{#each}}` blocks. Conditions can compare values
+  (`{{#if language == Swift}}`, `{{#if max >= 10}}`), and the parameters editor has a syntax guide one click away.
+  _Use Template_ opens a form (text, long text, number, toggle, choice, multiple choice, file, folder, date and list
+  fields) and gives you the result to copy or save as a note. To have an AI agent write templates for you, point it
+  at the [create-reusable-prompt](skills/create-reusable-prompt/SKILL.md) skill and its front matter JSON Schema.
 - **Voice notes.** Record into a note and transcribe the clip with on-device speech recognition. The transcript is added
   below the clip as a quote; the audio never leaves your Mac.
 - **Attachments and video reviews.** Drag or paste images, recordings and other files into a note. They are copied into

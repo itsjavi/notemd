@@ -228,6 +228,7 @@ Decisions live in `backlog/decisions/` (platform, storage format, git versioning
 | `scripts/`                                                                                  | `build-app.sh`, `make-icon.swift`, `window-screenshot.swift`, `demo-vault.sh`, `og-image.html`    |
 | `web/`, `.github/workflows/pages.yml`                                                       | Website (https://itsjavi.com/notemd/) and its GitHub Pages deployment                             |
 | `brand/`                                                                                    | Screenshot/social-card recipes (`brand/README.md`) and the generated intro video (`intro-video/`) |
+| `skills/create-reusable-prompt/`                                                            | Agent skill for writing template notes, and the front matter JSON Schema (keep in sync with Core) |
 
 ### Public docs, website and intro video
 

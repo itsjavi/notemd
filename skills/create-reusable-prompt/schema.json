@@ -1,0 +1,149 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "title": "NoteMD template front matter",
+  "description": "YAML front matter of a NoteMD template note (a reusable prompt). Parse the YAML between the --- lines to JSON, then validate it. A note becomes a template when it has `params` or `template: true`. Regular notes use #/$defs/note.",
+  "allOf": [{ "$ref": "#/$defs/note" }],
+  "anyOf": [
+    {
+      "type": "object",
+      "required": ["params"],
+      "properties": { "params": { "type": "array", "minItems": 1 } }
+    },
+    { "type": "object", "required": ["template"], "properties": { "template": { "const": true } } }
+  ],
+  "$defs": {
+    "note": {
+      "title": "NoteMD note front matter",
+      "description": "Front matter of any note. Every key is optional. Other keys are kept as written and listed in the preview's front matter table.",
+      "type": "object",
+      "properties": {
+        "title": {
+          "type": "string",
+          "description": "Display title. Without it, the note uses its first `# heading`, then its file name."
+        },
+        "tags": {
+          "description": "Tags, without `#`. Matching ignores case. The app also reads a comma-separated string and the `tag` key, but writes a list.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "template": {
+          "type": "boolean",
+          "description": "Marks the note as a template even without parameters. Not needed when `params` is present."
+        },
+        "params": {
+          "description": "The template's form fields, in form order. The app also reads the key `parameters`, but writes `params`.",
+          "type": "array",
+          "items": { "$ref": "#/$defs/parameter" }
+        }
+      }
+    },
+    "parameter": {
+      "title": "Template parameter",
+      "description": "One form field. Its value replaces `{{name}}` in the note body.",
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {
+          "type": "string",
+          "description": "Placeholder name used as {{name}}. Letters, digits, `_`, `-` or `.`, starting with a letter or `_`. Unique within the template. `this` is reserved for loop items.",
+          "pattern": "^[A-Za-z_][A-Za-z0-9_.-]*$",
+          "not": { "const": "this" }
+        },
+        "type": {
+          "description": "Field type; `text` when omitted. The app also reads aliases (string, select, bool, array, …), but writes these names.",
+          "enum": [
+            "text",
+            "textarea",
+            "number",
+            "toggle",
+            "choice",
+            "multichoice",
+            "file",
+            "folder",
+            "date",
+            "list"
+          ]
+        },
+        "label": {
+          "type": "string",
+          "description": "Field label. Defaults to the name humanized (`game_name` → `Game name`)."
+        },
+        "required": {
+          "type": "boolean",
+          "description": "The form refuses to produce output until this field has a value. Text-like fields need non-blank text, lists need an item."
+        },
+        "help": {
+          "type": "string",
+          "description": "Hint shown under the field. The app also reads `description`."
+        },
+        "placeholder": {
+          "type": "string",
+          "description": "Example value shown in an empty text, textarea, number, file, folder or list field."
+        },
+        "options": {
+          "description": "The choices of a `choice` or `multichoice` field. The app also reads `choices` and `values`.",
+          "type": "array",
+          "items": { "type": "string", "minLength": 1 },
+          "uniqueItems": true
+        },
+        "format": {
+          "type": "string",
+          "description": "Unicode date pattern for a `date` field, e.g. `d MMMM yyyy`. Defaults to `yyyy-MM-dd`."
+        },
+        "default": {
+          "description": "Initial value; its type depends on `type`. A `choice` starts on its first option when omitted, a `date` on today."
+        }
+      },
+      "allOf": [
+        {
+          "if": {
+            "required": ["type"],
+            "properties": { "type": { "enum": ["choice", "multichoice"] } }
+          },
+          "then": {
+            "required": ["options"],
+            "properties": { "options": { "type": "array", "minItems": 1 } }
+          }
+        },
+        {
+          "if": {
+            "properties": { "type": { "enum": ["text", "textarea", "file", "folder", "choice"] } }
+          },
+          "then": { "properties": { "default": { "type": "string" } } }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "number" } } },
+          "then": { "properties": { "default": { "type": "number" } } }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "toggle" } } },
+          "then": { "properties": { "default": { "type": "boolean" } } }
+        },
+        {
+          "if": {
+            "required": ["type"],
+            "properties": { "type": { "enum": ["multichoice", "list"] } }
+          },
+          "then": {
+            "properties": { "default": { "type": "array", "items": { "type": "string" } } }
+          }
+        },
+        {
+          "if": { "required": ["type"], "properties": { "type": { "const": "date" } } },
+          "then": {
+            "properties": {
+              "default": {
+                "description": "`today`, or a fixed date as YYYY-MM-DD.",
+                "type": "string",
+                "pattern": "^(today|now|[0-9]{4}-[0-9]{2}-[0-9]{2})$"
+              }
+            }
+          },
+          "else": { "not": { "required": ["format"] } }
+        }
+      ]
+    }
+  }
+}

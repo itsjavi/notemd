@@ -234,8 +234,14 @@
               <h3>Reusable prompts, as forms</h3>
               <p>
                 Add <code>params</code> to a note's front matter and write
-                <code>{{placeholders}}</code>, with <code>{{#if}}</code>,
-                <code>{{#unless}}</code> and <code>{{#each}}</code> blocks.
+                <code>{{placeholders}}</code>, with <code>{{#if}}</code>, <code>{{#elseif}}</code>,
+                <code>{{#unless}}</code> and <code>{{#each}}</code> blocks. Conditions can compare
+                values, like <code>{{#if language == Swift}}</code> or
+                <code>{{#if max &gt;= 10}}</code>. AI agents can write them too, with the
+                <a href="https://github.com/itsjavi/notemd/tree/main/skills/create-reusable-prompt"
+                  >create-reusable-prompt</a
+                >
+                skill.
               </p>
               <p>
                 <em>Use Template</em> opens a form with ten field types (text, long text, number,
