@@ -295,3 +295,17 @@ for incognito notes. `debug/state` reports the `layout:` (`files` or `root`) and
 Capture windows without activating the app: `swift scripts/window-screenshot.swift "NoteMD Test" /private/tmp/shot`.
 An open sheet blocks quitting (standard AppKit): close sheets before `quit`, or `pkill` the Test build.
 Real clicks, drags, Finder "Open With" and menu shortcuts still need a human check in the Dev build.
+
+### Never take over the user's Mac
+
+The user keeps working while agents run, so verification must never steal focus, move the pointer or type.
+
+- Verify UI only through the Test build: hooks, `debug/state` and `scripts/window-screenshot.swift`. Launch it and send
+  hooks with `open -g`; it's an `LSUIElement` app and never activates.
+- Don't use computer use or screen control, AppleScript or System Events clicks and keystrokes, or anything else that
+  activates an app or drives the pointer or keyboard, and don't launch the Dev or release builds (`make dev`,
+  `make run`), unless the user said yes in chat to that specific check. Ask first, saying what you'd click and why
+  hooks can't cover it.
+- When behavior needs a real click (context menus, drags, shortcuts), prefer a DEBUG hook that exercises the same code
+  path in-process. Otherwise list the check in the task notes and the final message for the user to do.
+- The orchestrator repeats this rule in every worker brief.
