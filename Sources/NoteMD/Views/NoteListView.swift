@@ -130,7 +130,7 @@ struct NoteListBackgroundMenu: View {
             Button("New Template") { createTemplate() }
             Divider()
             sortPicker
-        case .recentlyDeleted:
+        case .recentlyDeleted, .assets:
             EmptyView()
         case .allNotes, .none:
             Button("New Note") { store.createNote() }
@@ -162,6 +162,7 @@ struct NoteListBackgroundMenu: View {
 }
 
 struct NoteRowView: View {
+    @Environment(RepositoryStore.self) private var store
     let row: NoteRow
     var showsFolder: Bool
 
@@ -178,6 +179,8 @@ struct NoteRowView: View {
                 Text(note.title)
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
+                Spacer(minLength: 0)
+                attachmentsButton(for: note)
             }
             let preview = row.snippet ?? note.excerpt
             if !preview.isEmpty {
@@ -204,6 +207,35 @@ struct NoteRowView: View {
         }
         .padding(.vertical, 5)
         .accessibilityElement(children: .combine)
+    }
+
+    /// A paperclip when the note links files, with a warning when a link is broken; opens the attachments popover.
+    @ViewBuilder private func attachmentsButton(for note: Note) -> some View {
+        let attachments = store.attachments(ofNoteAt: note.path)
+        if !attachments.isEmpty {
+            let broken = attachments.filter { $0.status == .missing }.count
+            Button {
+                store.attachmentsPopoverNote = note.path
+            } label: {
+                HStack(spacing: 1) {
+                    Image(systemName: "paperclip")
+                    if broken > 0 {
+                        Image(systemName: "exclamationmark.triangle.fill").foregroundStyle(.orange)
+                    }
+                }
+                .font(.caption)
+                .foregroundStyle(.secondary)
+            }
+            .buttonStyle(.borderless)
+            .help(broken > 0 ? "\(attachments.count) attachments, \(broken) missing" : (attachments.count == 1 ? "1 attachment" : "\(attachments.count) attachments"))
+            .accessibilityLabel(broken > 0 ? "Attachments, \(broken) missing" : "Attachments")
+            .popover(isPresented: Binding(
+                get: { store.attachmentsPopoverNote == note.path },
+                set: { if !$0, store.attachmentsPopoverNote == note.path { store.attachmentsPopoverNote = nil } }
+            ), arrowEdge: .trailing) {
+                AttachmentsPopover(notePath: note.path).environment(store)
+            }
+        }
     }
 }
 
@@ -246,12 +278,12 @@ private struct DeletedNotesList: View {
     var body: some View {
         @Bindable var store = store
         if store.deletedFiles.isEmpty {
-            ContentUnavailableView("No Deleted Notes", systemImage: "trash", description: Text("Notes you delete can be restored here from their history."))
+            ContentUnavailableView("No Deleted Notes", systemImage: "trash", description: Text("Notes and attachments you delete can be restored here from their history."))
         } else {
             List(selection: $store.selectedDeletedPath) {
                 ForEach(store.deletedFiles) { file in
                     VStack(alignment: .leading, spacing: 3) {
-                        Text(((file.path as NSString).lastPathComponent as NSString).deletingPathExtension)
+                        Text(RecentlyDeleted.isAsset(file.path) ? (file.path as NSString).lastPathComponent : ((file.path as NSString).lastPathComponent as NSString).deletingPathExtension)
                             .font(.body.weight(.semibold))
                         Text(file.path).font(.caption).foregroundStyle(.secondary)
                         Text("Deleted \(file.deletedIn.date, format: .relative(presentation: .named))")

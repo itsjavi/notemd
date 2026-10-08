@@ -295,12 +295,15 @@ private struct DeletedNoteDetail: View {
                             .font(.caption).foregroundStyle(.secondary)
                     }
                     Spacer()
-                    Button("Restore Note") { Task { await store.restoreDeleted(file) } }
+                    Button(RecentlyDeleted.isAsset(path) ? "Restore File" : "Restore Note") { Task { await store.restoreDeleted(file) } }
                         .buttonStyle(.borderedProminent)
                 }
                 .padding(16)
                 Divider()
-                if let content {
+                if RecentlyDeleted.isAsset(path) {
+                    // Attachments may be binary or LFS pointers in history: describe rather than preview.
+                    ContentUnavailableView((path as NSString).lastPathComponent, systemImage: AssetDescription.symbol(for: path), description: Text("Restoring brings the file back to \(path), with its full content."))
+                } else if let content {
                     MarkdownPreview(markdown: content, baseDirectory: store.rootURL.appendingPathComponent(path).deletingLastPathComponent(), accessRoot: store.rootURL)
                 } else {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
@@ -308,6 +311,7 @@ private struct DeletedNoteDetail: View {
             }
             .task(id: path) {
                 content = nil
+                guard !RecentlyDeleted.isAsset(path) else { return }
                 content = (try? await store.git?.content(of: file.path, at: file.lastRevision)) ?? ""
             }
         } else {

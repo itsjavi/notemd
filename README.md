@@ -52,7 +52,9 @@ And while I was at it, a proper editor for every other text file on my Mac. Good
   below the clip as a quote; the audio never leaves your Mac.
 - **Attachments and video reviews.** Drag or paste images, recordings and other files into a note. They are copied into
   the vault's `assets/` folder (or linked where they are), stored with Git LFS, and audio and video play inline in the
-  preview.
+  preview. A paperclip in the note list shows which notes have attachments and warns about broken links. The Assets
+  view lists every file with where it's used, finds unused and missing ones, and renames or bins them while keeping the
+  notes' links right.
 - **Organize and find.** Folders with a color and an icon, tags in front matter (`tags:`), and search across titles,
   tags and text with `tag:name` / `#name` filters.
 - **GitHub Flavored Markdown.** Tables, task lists, footnotes, alerts and autolinks, rendered by cmark-gfm, with Editor,

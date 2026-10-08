@@ -10,10 +10,12 @@ struct RepositoryWindowView: View {
             SidebarView()
                 .navigationSplitViewColumnWidth(min: 200, ideal: 236, max: 360)
         } content: {
-            NoteListView()
-                .navigationSplitViewColumnWidth(min: 250, ideal: 310, max: 480)
+            Group {
+                if store.sidebarSelection == .assets { AssetsListView() } else { NoteListView() }
+            }
+            .navigationSplitViewColumnWidth(min: 250, ideal: 310, max: 480)
         } detail: {
-            NoteDetailView()
+            if store.sidebarSelection == .assets { AssetInspectorView() } else { NoteDetailView() }
         }
         .searchable(text: $store.searchText, placement: .toolbar, prompt: "Search notes")
         .searchScopes($store.searchScope, activation: .onSearchPresentation) {
@@ -27,6 +29,23 @@ struct RepositoryWindowView: View {
             sheetContent(sheet)
                 .environment(store)
         }
+        .confirmationDialog(trashTitle, isPresented: Binding(get: { store.assetsPendingTrash != nil }, set: { if !$0 { store.assetsPendingTrash = nil } })) {
+            Button("Move to Bin", role: .destructive) {
+                if let paths = store.assetsPendingTrash { store.trashAssets(paths) }
+                store.assetsPendingTrash = nil
+            }
+        } message: {
+            Text(trashMessage)
+        }
+        .alert(restoreTitle, isPresented: Binding(get: { store.pendingAssetRestore != nil }, set: { if !$0 { store.pendingAssetRestore = nil } })) {
+            Button("Restore Attachments") {
+                if let pending = store.pendingAssetRestore { Task { await store.restoreDeletedAssets(pending.files) } }
+                store.pendingAssetRestore = nil
+            }
+            Button("Not Now", role: .cancel) { store.pendingAssetRestore = nil }
+        } message: {
+            Text((store.pendingAssetRestore?.files ?? []).map { ($0.path as NSString).lastPathComponent }.formatted(.list(type: .and)))
+        }
         .alert("Something went wrong", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -35,8 +54,31 @@ struct RepositoryWindowView: View {
         .frame(minWidth: 860, minHeight: 520)
     }
 
+    private var trashTitle: String {
+        let count = store.assetsPendingTrash?.count ?? 0
+        return count == 1 ? "Move “\(((store.assetsPendingTrash?.first ?? "") as NSString).lastPathComponent)” to the Bin?" : "Move \(count) unused assets to the Bin?"
+    }
+
+    /// Warns that the files go to the macOS Bin and names the notes that will lose their links.
+    private var trashMessage: String {
+        let paths = store.assetsPendingTrash ?? []
+        let users = Set(paths.flatMap { store.assetIndex.notes(referencing: $0) }).sorted().map { store.note(at: $0)?.title ?? $0 }
+        let bin = paths.count == 1 ? "The file moves to the macOS Bin." : "The files move to the macOS Bin."
+        guard !users.isEmpty else { return bin + " No note links " + (paths.count == 1 ? "it." : "them.") }
+        return bin + " Its links are removed from " + users.formatted(.list(type: .and)) + "."
+    }
+
+    private var restoreTitle: String {
+        let pending = store.pendingAssetRestore
+        let title = pending.flatMap { store.note(at: $0.notePath)?.title } ?? "The note"
+        let count = pending?.files.count ?? 0
+        return "“\(title)” links \(count == 1 ? "an attachment" : "\(count) attachments") that \(count == 1 ? "was" : "were") deleted too. Restore \(count == 1 ? "it" : "them")?"
+    }
+
     @ViewBuilder private func sheetContent(_ sheet: RepositorySheet) -> some View {
         switch sheet {
+        case .renameAsset(let path):
+            RenameAssetSheet(path: path, name: ((path as NSString).lastPathComponent as NSString).deletingPathExtension)
         case .folder(let draft):
             FolderSheet(draft: draft)
         case .renameNote(let path):

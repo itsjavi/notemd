@@ -182,7 +182,7 @@ public enum Attachments {
     }
 
     /// Resolves `.` and `..`; nil when the path climbs above the root.
-    private static func normalize(_ components: [String]) -> [String]? {
+    static func normalize(_ components: [String]) -> [String]? {
         var result: [String] = []
         for component in components where component != "." {
             if component == ".." {

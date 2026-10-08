@@ -259,7 +259,8 @@ change.
 ### Driving the Test build
 
 Launch with `open -g "build/NoteMD Test.app"` and send hooks with
-`open -g -a "$PWD/build/NoteMD Test.app" "notemd-test://<verb>?<query>"`. Add `repo=<path suffix>` to target a window.
+`open -g -a "$PWD/build/NoteMD Test.app" "notemd-test://<verb>?<query>"`. Add `repo=<path suffix>` to target a window
+(`?repo=` when the verb has no other query: `ui/commit-now&repo=x` is not a verb and does nothing).
 Hooks run only in the Test variant and only against repositories under `/private/tmp` or `/private/var/folders`;
 note paths must be plain repository-relative paths.
 
@@ -268,8 +269,10 @@ note paths must be plain repository-relative paths.
 - `ui/new-note?title=&body=`, `ui/type?text=`, `ui/tags?value=a,b`, `ui/folder-style?path=&icon=&color=`
 - `ui/sheet?name=history|form|params|rename|folder-new|folder-edit&path=`, `ui/close-sheet`
 - `ui/move?note=&folder=`, `ui/move-folder?path=&parent=`, `ui/rename?note=&name=`, `ui/trash?note=`, `ui/restore-deleted?path=`,
-  `ui/remove-deleted?path=|all=1` (hides Recently Deleted entries). The background Test build can commit a minute late:
-  wait for `git log` before relying on history
+  `ui/remove-deleted?path=|all=1` (hides Recently Deleted entries)
+- `ui/sidebar?item=assets`, `ui/asset-filter?value=all|unused|missing`, `ui/asset-select?path=`, `ui/attachments?note=`
+  (paperclip popover), `ui/asset-unlink?note=&asset=`, `ui/asset-rename?path=&name=`, `ui/asset-delete?path=` and
+  `ui/assets-cleanup` (as confirmed; `confirm=1` only shows the dialog), `ui/sheet?name=rename-asset&path=`
 - `ui/editor-command?name=tab|backtab|newline|text&text=&select=end|all[&target=document]`, `ui/settings`
 - `ui/editor-option?name=line-numbers|invisibles&value=0|1`; `debug/editor-bench?out=[&target=document]` times typing
   and redraws in the open editor

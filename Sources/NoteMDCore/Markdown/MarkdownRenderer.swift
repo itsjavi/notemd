@@ -50,7 +50,13 @@ public enum MarkdownRenderer {
 
     /// Destinations of every link and image in `markdown`, as written (after Markdown unescaping).
     public static func linkDestinations(in markdown: String) -> [String] {
-        withDocument(MarkdownText(markdown).body, options: CMARK_OPT_DEFAULT) { document, _ in
+        linkURLs(in: MarkdownText(markdown).body, options: CMARK_OPT_DEFAULT)
+    }
+
+    /// URLs of every link and image node in `body` (no front matter handling). Footnotes are on by
+    /// default, as in the preview, so `[^1]: …` is not read as a link definition.
+    static func linkURLs(in body: String, options: Int32 = CMARK_OPT_FOOTNOTES) -> [String] {
+        withDocument(body, options: options) { document, _ in
             var nodes: [UnsafeMutablePointer<cmark_node>] = []
             collect(CMARK_NODE_LINK, from: document, into: &nodes)
             collect(CMARK_NODE_IMAGE, from: document, into: &nodes)

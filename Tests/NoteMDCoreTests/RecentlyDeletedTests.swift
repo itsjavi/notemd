@@ -16,6 +16,12 @@ import Testing
         #expect(RecentlyDeleted.visible(files, cleared: [], existingPaths: []).map(\.path) == ["a.md", "Folder/c.markdown"])
     }
 
+    @Test func listsDeletedAssetsWhenAsked() {
+        let files = [deleted("a.md", in: "c1"), deleted("assets/b.png", in: "c1"), deleted("other/c.png", in: "c1"), deleted("assets", in: "c1")]
+        #expect(RecentlyDeleted.visible(files, cleared: [], existingPaths: [], includingAssets: true).map(\.path) == ["a.md", "assets/b.png"])
+        #expect(RecentlyDeleted.isAsset("Assets/x.pdf") && !RecentlyDeleted.isAsset("notes/assets.md"))
+    }
+
     @Test func hidesRestoredAndClearedDeletions() {
         let files = [deleted("a.md", in: "c1"), deleted("b.md", in: "c1"), deleted("c.md", in: "c2")]
         let cleared: Set = [RecentlyDeleted.key(for: files[1])]

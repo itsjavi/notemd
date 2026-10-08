@@ -10,12 +10,17 @@ public enum RecentlyDeleted {
         file.deletedIn.id + ":" + file.path
     }
 
-    /// Files with a listed extension that aren't back in the repository and haven't been cleared.
+    /// Whether `path` is in the repository's `assets/` folder (attachments, decision-5).
+    public static func isAsset(_ path: String) -> Bool {
+        path.split(separator: "/").first?.lowercased() == Attachments.folderName && path.contains("/")
+    }
+
+    /// Notes (and, with `includingAssets`, files in `assets/`) that aren't back in the repository and haven't been cleared.
     public static func visible(
-        _ files: [GitDeletedFile], cleared: Set<String>, existingPaths: Set<String>, extensions: Set<String> = NoteMDCore.noteExtensions
+        _ files: [GitDeletedFile], cleared: Set<String>, existingPaths: Set<String>, includingAssets: Bool = false
     ) -> [GitDeletedFile] {
         files.filter { file in
-            extensions.contains((file.path as NSString).pathExtension.lowercased())
+            (NoteMDCore.noteExtensions.contains((file.path as NSString).pathExtension.lowercased()) || (includingAssets && isAsset(file.path)))
                 && !existingPaths.contains(file.path)
                 && !cleared.contains(key(for: file))
         }

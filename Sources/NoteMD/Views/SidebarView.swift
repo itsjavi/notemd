@@ -16,6 +16,11 @@ struct SidebarView: View {
                     Label("Templates", systemImage: "wand.and.stars")
                         .badge(store.notes.filter(\.isTemplate).count)
                         .tag(SidebarItem.templates)
+                    if !store.assetFiles.isEmpty || !store.assetIndex.referencedPaths.isEmpty {
+                        Label("Assets", systemImage: "paperclip")
+                            .badge(store.assetFiles.count)
+                            .tag(SidebarItem.assets)
+                    }
                     if store.isVersioned {
                         Label("Recently Deleted", systemImage: "trash")
                             .tag(SidebarItem.recentlyDeleted)

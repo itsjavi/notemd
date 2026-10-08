@@ -30,7 +30,7 @@ enum DebugHooks {
         let verb = (url.host() ?? "") + url.path()
         // Optional `repo=<path suffix>` targets a specific repository window.
         targetRepo = query["repo"]
-        for key in ["note", "path", "folder", "parent"] {
+        for key in ["note", "path", "folder", "parent", "asset"] {
             if let value = query[key], !SafeFileWriter.isSafeRelativePath(value) && safePath(value) == nil { return }
         }
         if verb.hasPrefix("ui/"), let store, safePath(store.rootURL.path) == nil { return }
@@ -59,6 +59,7 @@ enum DebugHooks {
                 switch query["item"] {
                 case "templates": store.sidebarSelection = .templates
                 case "deleted": store.sidebarSelection = .recentlyDeleted
+                case "assets": store.sidebarSelection = .assets
                 default: store.sidebarSelection = .allNotes
                 }
             }
@@ -91,6 +92,7 @@ enum DebugHooks {
             case "params": store.sheet = .templateParameters(path: path)
             case "guide": store.showsTemplateGuide = true
             case "rename": store.sheet = .renameNote(path: path)
+            case "rename-asset": store.sheet = .renameAsset(path: path)
             case "folder-new": store.beginCreateFolder(in: query["parent"] ?? "")
             case "folder-edit": store.beginEditFolder(path)
             default: break
@@ -122,6 +124,25 @@ enum DebugHooks {
             if let store, let note = query["note"], let name = query["name"] { store.renameNote(note, to: name) }
         case "ui/trash":
             if let store, let path = query["note"] { store.trashNote(path) }
+        case "ui/asset-filter":
+            if let filter = AssetFilter(rawValue: query["value"] ?? "") { store?.assetFilter = filter }
+        case "ui/asset-select":
+            store?.selectedAssetPath = query["path"]
+        case "ui/attachments":
+            // Opens (or with no note, closes) the paperclip popover of a note-list row.
+            store?.attachmentsPopoverNote = query["note"]
+        case "ui/asset-unlink":
+            if let note = query["note"], let asset = query["asset"] { store?.unlinkAsset(asset, fromNoteAt: note) }
+        case "ui/asset-rename":
+            if let path = query["path"], let name = query["name"] { store?.renameAsset(path, to: name) }
+        case "ui/asset-delete":
+            // As confirmed in the Move to Bin dialog; `confirm=1` only shows the dialog.
+            guard let store, let path = query["path"] else { return }
+            if query["confirm"] == "1" { store.assetsPendingTrash = [path] } else { store.trashAssets([path]) }
+        case "ui/assets-cleanup":
+            guard let store else { return }
+            let unused = store.assetRows(.unused).map(\.path)
+            if query["confirm"] == "1" { store.assetsPendingTrash = unused } else { store.trashAssets(unused) }
         case "ui/remove-deleted":
             // `path=` removes one entry from Recently Deleted, `all=1` empties it (as the confirmed menu action does).
             guard let store else { return }
@@ -344,6 +365,12 @@ enum DebugHooks {
             lines.append("search: \(store.searchText)")
             lines.append("visible: \(store.visibleNotes.map(\.id))")
             lines.append("deleted: \(store.deletedFiles.map(\.path))")
+            lines.append("assets: \(store.assetRows(.all).map { "\($0.path)=\($0.isMissing ? "missing" : String($0.notes.count))" })")
+            lines.append("assetFilter: \(store.assetFilter.rawValue) selectedAsset: \(store.selectedAssetPath ?? "-")")
+            if let path = store.selectedNoteID {
+                lines.append("attachments: \(store.attachments(ofNoteAt: path).map { "\($0.link.repositoryPath ?? $0.link.destination)=\($0.status)" })")
+            }
+            lines.append("pendingAssetRestore: \(store.pendingAssetRestore.map { "\($0.notePath)<-\($0.files.map(\.path))" } ?? "-")")
             lines.append("selected: \(store.selectedNoteID ?? "-")")
             lines.append("sheet: \(store.sheet?.id ?? "-")")
             lines.append("git: \(store.gitState)")

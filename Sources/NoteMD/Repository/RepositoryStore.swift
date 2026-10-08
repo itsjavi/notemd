@@ -6,6 +6,7 @@ enum SidebarItem: Hashable {
     case allNotes
     case templates
     case recentlyDeleted
+    case assets
     case folder(String)
     case tag(String)
 }
@@ -54,6 +55,7 @@ enum RepositorySheet: Identifiable {
     case templateParameters(path: String)
     /// Transcribe the clip `source` (link destination as written) embedded in the note at `path`.
     case transcribe(path: String, source: String)
+    case renameAsset(path: String)
 
     var id: String {
         switch self {
@@ -63,6 +65,7 @@ enum RepositorySheet: Identifiable {
         case .templateForm(let path): "form:" + path
         case .templateParameters(let path): "params:" + path
         case .transcribe(let path, let source): "transcribe:" + path + ":" + source
+        case .renameAsset(let path): "rename-asset:" + path
         }
     }
 }
@@ -118,6 +121,23 @@ enum GitState: Equatable {
     var showsVoiceRecorder = false
     /// The syntax guide popover of the Template Parameters sheet.
     var showsTemplateGuide = false
+
+    // MARK: Assets state (see RepositoryStore+Assets.swift)
+
+    /// Which notes link which files, derived from the note bodies (never stored, so it can't drift).
+    var assetIndex = AssetReferenceIndex()
+    /// Files in `assets/`, refreshed on scans and on file events there.
+    var assetFiles: [AssetFile] = []
+    /// Bumped when files may have appeared or disappeared, so attachment status is checked again.
+    var assetsRevision = 0
+    var assetFilter = AssetFilter.all
+    var selectedAssetPath: String?
+    /// The note whose attachments popover is open.
+    var attachmentsPopoverNote: String?
+    /// A restored note links attachments that were deleted too: offer to bring them back.
+    var pendingAssetRestore: PendingAssetRestore?
+    /// Files waiting for the Move to Bin confirmation (one asset, or Clean Up Unused).
+    var assetsPendingTrash: [String]?
 
     @ObservationIgnored private var lfsEnabled = false
     @ObservationIgnored private var notesByPath: [String: Note] = [:]
@@ -188,9 +208,19 @@ enum GitState: Equatable {
             needsRescan = false
             let rootURL = self.rootURL
             let previous = notesByPath
+            let previousIndex = assetIndex
             do {
-                let snapshot = try await Task.detached { try RepositoryScanner.scan(rootURL: rootURL, previous: previous) }.value
+                let (snapshot, index) = try await Task.detached {
+                    let snapshot = try RepositoryScanner.scan(rootURL: rootURL, previous: previous)
+                    // Only changed bodies are parsed again.
+                    var index = previousIndex
+                    for note in snapshot.notes { index.update(notePath: note.path, body: note.body, rootPath: rootURL.path) }
+                    index.retain(notePaths: Set(snapshot.notes.map(\.path)))
+                    return (snapshot, index)
+                }.value
+                assetIndex = index
                 apply(snapshot)
+                refreshAssetFiles()
             } catch {
                 errorMessage = "Couldn't read “\(name)”: \(error.localizedDescription)"
             }
@@ -223,7 +253,10 @@ enum GitState: Equatable {
         autoCommitter?.markDirty()
         updatePendingState()
         let isAsset = { (path: String) in path.split(separator: "/").first?.lowercased() == Attachments.folderName }
-        if relevant.contains(where: isAsset) { didAddAssets() }
+        if relevant.contains(where: isAsset) {
+            didAddAssets()
+            refreshAssetFiles()
+        }
         // Attachments hold no notes: only other changes need a rescan.
         if relevant.contains(where: { !isAsset($0) }) { Task { await reload() } }
     }
@@ -279,6 +312,7 @@ enum GitState: Equatable {
         case .allNotes, .none: "All Notes"
         case .templates: "Templates"
         case .recentlyDeleted: "Recently Deleted"
+        case .assets: "Assets"
         case .folder(let path): path.isEmpty ? name : (root.find(path)?.name ?? (path as NSString).lastPathComponent)
         case .tag(let tag): "#" + tag
         }
@@ -304,7 +338,7 @@ enum GitState: Equatable {
         switch sidebarSelection {
         case .allNotes, .none: true
         case .templates: note.isTemplate
-        case .recentlyDeleted: false
+        case .recentlyDeleted, .assets: false
         case .folder(let path):
             if path.isEmpty { settings.includeSubfolders || note.folderPath.isEmpty }
             else { note.folderPath == path || (settings.includeSubfolders && note.folderPath.hasPrefix(path + "/")) }
@@ -375,6 +409,7 @@ enum GitState: Equatable {
     }
 
     private func upsert(_ note: Note) {
+        assetIndex.update(notePath: note.path, body: note.body, rootPath: rootURL.path)
         notesByPath[note.path] = note
         if let index = notes.firstIndex(where: { $0.path == note.path }) {
             notes[index] = note
@@ -409,6 +444,7 @@ enum GitState: Equatable {
             let newPath = relativePath(of: target)
             notesByPath[path] = nil
             notes.removeAll { $0.path == path }
+            assetIndex.remove(notePath: path)
             if editor?.path == path { editor?.relocate(path: newPath, url: target) }
             _ = scanSingle(newPath)
             refreshVisibleNotes()
@@ -463,7 +499,7 @@ enum GitState: Equatable {
         searchText = ""
         if folderPath != nil, sidebarSelection != .folder(folder), sidebarSelection != .allNotes {
             sidebarSelection = folder.isEmpty ? .allNotes : .folder(folder)
-        } else if [.templates, .recentlyDeleted, nil].contains(sidebarSelection) {
+        } else if [.templates, .recentlyDeleted, .assets, nil].contains(sidebarSelection) {
             sidebarSelection = .allNotes
         }
         refreshVisibleNotes()
@@ -500,6 +536,7 @@ enum GitState: Equatable {
         let newPath = relativePath(of: target)
         notesByPath[note.path] = nil
         notes.removeAll { $0.path == note.path }
+        assetIndex.remove(notePath: note.path)
         if wasOpen {
             editor?.relocate(path: newPath, url: target)
             selectedNoteIDWithoutReopen(newPath)
@@ -551,6 +588,7 @@ enum GitState: Equatable {
         }
         notesByPath[path] = nil
         notes.removeAll { $0.path == path }
+        assetIndex.remove(notePath: path)
         refreshVisibleNotes()
         if selectedNoteID == path {
             if let index, !visibleNotes.isEmpty {
@@ -1055,7 +1093,12 @@ enum GitState: Equatable {
     func loadDeletedFiles() async {
         guard let git else { return }
         let files = (try? await git.deletedFiles(limit: 200)) ?? []
-        deletedFiles = RecentlyDeleted.visible(files, cleared: clearedDeletions, existingPaths: Set(notesByPath.keys))
+        let rootURL = self.rootURL
+        // Assets are listed too; one that is back on disk isn't deleted any more.
+        let existing = Set(notesByPath.keys).union(files.map(\.path).filter {
+            RecentlyDeleted.isAsset($0) && FileManager.default.fileExists(atPath: rootURL.appendingPathComponent($0).path)
+        })
+        deletedFiles = RecentlyDeleted.visible(files, cleared: clearedDeletions, existingPaths: existing, includingAssets: true)
     }
 
     /// Hides deletions from Recently Deleted for good (on this Mac). The files stay in git history.
@@ -1071,7 +1114,37 @@ enum GitState: Equatable {
         set { UserDefaults.standard.set(newValue.sorted(), forKey: "clearedDeletions:" + rootURL.path) }
     }
 
+    /// Restores deleted attachments with `git checkout`, so Git LFS brings back the real file rather than its pointer.
+    func restoreDeletedAssets(_ files: [GitDeletedFile]) async {
+        guard let git else { return }
+        for file in files where SafeFileWriter.isSafeRelativePath(file.path) {
+            do {
+                _ = try await git.run(["checkout", file.lastRevision, "--", file.path])
+            } catch {
+                errorMessage = "Couldn't restore “\((file.path as NSString).lastPathComponent)”: \(error.localizedDescription)"
+                continue
+            }
+            deletedFiles.removeAll { $0.path == file.path }
+            if selectedDeletedPath == file.path { selectedDeletedPath = nil }
+        }
+        refreshAssetFiles()
+        autoCommitter?.markDirty()
+        updatePendingState()
+    }
+
+    /// After restoring a note, offers to restore the deleted attachments it links.
+    private func offerToRestoreAssets(linkedBy path: String, content: String) {
+        let links = AssetReferences.links(in: content, notePath: path, rootPath: rootURL.path)
+        let gone = Set(links.compactMap(\.repositoryPath).filter { !FileManager.default.fileExists(atPath: rootURL.appendingPathComponent($0).path) })
+        let files = deletedFiles.filter { gone.contains($0.path) }
+        if !files.isEmpty { pendingAssetRestore = PendingAssetRestore(notePath: path, files: files) }
+    }
+
     func restoreDeleted(_ file: GitDeletedFile) async {
+        if RecentlyDeleted.isAsset(file.path) {
+            await restoreDeletedAssets([file])
+            return
+        }
         guard let git, let content = try? await git.content(of: file.path, at: file.lastRevision) else {
             errorMessage = "Couldn't read the deleted note from history."
             return
@@ -1096,6 +1169,7 @@ enum GitState: Equatable {
         sidebarSelection = .allNotes
         selectedNoteID = path
         await reload()
+        offerToRestoreAssets(linkedBy: path, content: content)
     }
 }
 
