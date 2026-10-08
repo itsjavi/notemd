@@ -17,6 +17,7 @@ git init -q -b main
 git config user.name "Ana Rivera"; git config user.email "ana@example.com"
 git lfs install --local >/dev/null
 printf 'files/assets/** filter=lfs diff=lfs merge=lfs -text\n' > .gitattributes
+printf '{\n  "layout" : "files"\n}\n' > .notemd.json  # decision-8 marker
 # Notes and assets live in files/; git commands below still cover the whole repository.
 cd files
 

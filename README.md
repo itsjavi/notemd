@@ -39,7 +39,8 @@ And while I was at it, a proper editor for every other text file on my Mac. Good
 
 - **Notes are files.** Any folder can be a vault. Open several at once, each in its own window, and switch between
   recent ones. No database and no proprietary format: just Markdown files in the vault's `files/` folder, in a git
-  repository. Vaults that kept notes at their root are moved into `files/` with one commit the first time they open.
+  repository. Existing NoteMD vaults move into `files/` with one commit the first time they open; other git repositories keep their
+  layout.
 - **Incognito notes.** Jot something down without a trace (⌃⌘N): incognito notes get their own sidebar section, are
   never committed and are deleted when you close the window or quit. Move one into a folder to keep it.
 - **Versioned automatically.** Edits are saved as you type and committed a few seconds after you stop (configurable),

@@ -311,7 +311,7 @@ enum RepositorySeeder {
         try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
         let existing = (try? fileManager.contentsOfDirectory(atPath: url.path)) ?? []
         guard existing.filter({ !$0.hasPrefix(".") }).isEmpty else { return }
-        let notes = try RepositoryLayout.moveIntoNotesFolder([], at: url).contentURL(in: url)
+        let notes = try RepositoryLayout.moveIntoFilesFolder(at: url).contentURL(in: url)
         try welcome.write(to: notes.appendingPathComponent("Welcome to NoteMD.md"), atomically: true, encoding: .utf8)
         let templates = notes.appendingPathComponent("Templates", isDirectory: true)
         try fileManager.createDirectory(at: templates, withIntermediateDirectories: true)

@@ -33,7 +33,7 @@ import Testing
         #expect(RepositoryLayout.root.contentPath(forRepositoryPath: "a.md") == "a.md")
     }
 
-    @Test func movesRootEntriesIntoFiles() throws {
+    @Test func movesAnUnmarkedRepositoryIntoFilesAndMarksIt() throws {
         let root = try makeRoot()
         try write("# A", to: root.appending(path: "a.md"))
         try write("# B", to: root.appending(path: "Work/b.md"))
@@ -43,10 +43,9 @@ import Testing
         try FileManager.default.createDirectory(at: root.appending(path: ".git"), withIntermediateDirectories: true)
 
         #expect(RepositoryLayout.existing(at: root) == .root)
-        let strays = RepositoryLayout.strayEntries(at: root).map(\.lastPathComponent)
-        #expect(strays == [".notemd.json", "Work", "a.md", "assets"])
+        #expect(RepositoryLayout.unmarkedEntries(at: root).map(\.lastPathComponent) == ["Work", "a.md", "assets", ".notemd.json"])
 
-        let layout = try RepositoryLayout.moveIntoNotesFolder(RepositoryLayout.strayEntries(at: root), at: root)
+        let layout = try RepositoryLayout.moveIntoFilesFolder(at: root)
         #expect(layout.contentFolder == "files")
         let files = root.appending(path: "files")
         #expect(read(files.appending(path: "a.md")) == "# A")
@@ -56,38 +55,72 @@ import Testing
         #expect(read(root.appending(path: ".gitignore")) == ".DS_Store\n")
         #expect(FileManager.default.fileExists(atPath: root.appending(path: ".git").path))
         #expect(!FileManager.default.fileExists(atPath: root.appending(path: "a.md").path))
+        #expect(RepositoryLayout.hasFilesMarker(at: root) && !RepositoryLayout.isMoveInterrupted(at: root))
         #expect(RepositoryLayout.existing(at: root) == layout)
         #expect(RepositoryLayout.strayEntries(at: root).isEmpty)
     }
 
+    @Test func anUnmarkedFilesFolderOfTheUsersMovesInsideTheNewOne() throws {
+        let root = try makeRoot()
+        try write("mine", to: root.appending(path: "Files/a.md"))
+        try write("root", to: root.appending(path: "a.md"))
+        // Not marked and not alone at the root: it's the user's folder, not the notes folder.
+        #expect(RepositoryLayout.existing(at: root) == .root)
+        try RepositoryLayout.moveIntoFilesFolder(at: root)
+        let notes = try FileManager.default.contentsOfDirectory(atPath: root.path).filter { $0.lowercased() == "files" }
+        #expect(notes == ["files"])
+        #expect(read(root.appending(path: "files/Files/a.md")) == "mine")
+        #expect(read(root.appending(path: "files/a.md")) == "root")
+    }
+
+    @Test func resumesAnInterruptedMove() throws {
+        let root = try makeRoot()
+        try write("moved", to: root.appending(path: ".notemd-moving/a.md"))
+        try write("left", to: root.appending(path: "b.md"))
+        #expect(RepositoryLayout.isMoveInterrupted(at: root))
+        try RepositoryLayout.moveIntoFilesFolder(at: root)
+        #expect(read(root.appending(path: "files/a.md")) == "moved" && read(root.appending(path: "files/b.md")) == "left")
+        #expect(!RepositoryLayout.isMoveInterrupted(at: root))
+    }
+
+    @Test func adoptsAFilesFolderThatIsAloneAtTheRoot() throws {
+        let root = try makeRoot()
+        try write("# A", to: root.appending(path: "files/a.md"))
+        try write(#"{"color":"green"}"#, to: root.appending(path: ".notemd.json"))
+        #expect(RepositoryLayout.existing(at: root).contentFolder == "files")
+        try RepositoryLayout.markFilesLayout(at: root)
+        #expect(RepositoryLayout.hasFilesMarker(at: root))
+        #expect(read(root.appending(path: "files/.notemd.json")) == #"{"color":"green"}"#)
+    }
+
     @Test func mergesLaterStraysWithoutOverwriting() throws {
         let root = try makeRoot()
+        try RepositoryLayout.moveIntoFilesFolder(at: root)
         try write("kept", to: root.appending(path: "files/a.md"))
-        try write("kept appearance", to: root.appending(path: "files/.notemd.json"))
         try write("png", to: root.appending(path: "files/assets/x.png"))
         try write("stray", to: root.appending(path: "a.md"))
-        try write("root appearance", to: root.appending(path: ".notemd.json"))
         try write("other png", to: root.appending(path: "assets/x.png"))
         try write("new", to: root.appending(path: "assets/y.png"))
 
-        // The notes folder already has an appearance file: the root's stays where it is.
+        // The marker stays at the root; only visible entries are strays.
         #expect(RepositoryLayout.strayEntries(at: root).map(\.lastPathComponent) == ["a.md", "assets"])
         try RepositoryLayout.moveIntoNotesFolder(RepositoryLayout.strayEntries(at: root), at: root)
         let files = root.appending(path: "files")
         #expect(read(files.appending(path: "a.md")) == "kept")
         #expect(read(files.appending(path: "a-2.md")) == "stray")
-        #expect(read(files.appending(path: ".notemd.json")) == "kept appearance")
         #expect(read(files.appending(path: "assets/x.png")) == "png")
         #expect(read(files.appending(path: "assets/x-2.png")) == "other png")
         #expect(read(files.appending(path: "assets/y.png")) == "new")
         #expect(!FileManager.default.fileExists(atPath: root.appending(path: "assets").path))
+        #expect(RepositoryLayout.hasFilesMarker(at: root))
     }
 
     @Test func createsTheNotesFolderForAnEmptyRepository() throws {
         let root = try makeRoot()
-        let layout = try RepositoryLayout.moveIntoNotesFolder([], at: root)
+        let layout = try RepositoryLayout.moveIntoFilesFolder(at: root)
         #expect(layout.contentFolder == "files")
         #expect(FileManager.default.fileExists(atPath: root.appending(path: "files").path))
+        #expect(RepositoryLayout.hasFilesMarker(at: root))
     }
 
     @Test func incognitoFolderIgnoresItselfAndIsDiscarded() throws {

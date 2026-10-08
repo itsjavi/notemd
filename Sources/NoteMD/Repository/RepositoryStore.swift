@@ -190,10 +190,11 @@ enum GitState: Equatable {
     /// Moves notes from the root into `files/` (decision-8) before anything reads them.
     private func prepareLayout() async {
         let rootURL = self.rootURL
+        let mayRearrange = RepositoryLayout.hasFilesMarker(at: rootURL) ? true : await RepositoryVetting.mayRearrange(rootURL)
         let result = await Task.detached {
             // Left over from a crash: incognito notes never outlive the window that had them.
             RepositoryLayout.discardIncognitoFolder(at: rootURL)
-            return RepositoryVetting.prepareLayout(rootURL)
+            return RepositoryVetting.prepareLayout(rootURL, mayRearrange: mayRearrange)
         }.value
         layout = result.layout
         movedIntoNotesFolder = result.moved
@@ -214,9 +215,10 @@ enum GitState: Equatable {
         }
         watcher?.stop()
         watcher = nil
+        // Before waiting on the commit: a window reopened on this repository meanwhile keeps its new incognito notes.
+        RepositoryLayout.discardIncognitoFolder(at: rootURL)
         await autoCommitter?.flush()
         autoCommitter?.cancel()
-        RepositoryLayout.discardIncognitoFolder(at: rootURL)
     }
 
     private func observeCommitDelay() {
@@ -536,7 +538,7 @@ enum GitState: Equatable {
 
     /// The git path of a note path.
     func gitPath(_ path: String) -> String {
-        layout.repositoryPath(forContentPath: path)
+        RepositoryLayout.isIncognitoPath(path) ? path : layout.repositoryPath(forContentPath: path)
     }
 
     /// Only folders from the scanned tree: drag payloads and links can't reach outside the repository.
@@ -613,10 +615,14 @@ enum GitState: Equatable {
     func moveNote(_ path: String, toFolder folderPath: String) {
         guard let note = notesByPath[path], note.folderPath != folderPath, isKnownFolder(folderPath) else { return }
         let keeps = RepositoryLayout.isIncognitoPath(path)
-        if keeps { keepIncognitoAttachments(ofNoteAt: path) }
+        let kept = keeps ? keepIncognitoAttachments(ofNoteAt: path) : nil
         guard let note = notesByPath[path] else { return }
         let target = NoteFileName.uniqueURL(in: url(forFolder: folderPath), base: note.baseName, pathExtension: note.url.pathExtension)
-        move(note: note, to: target)
+        guard move(note: note, to: target) else {
+            // The note stays incognito: so do its attachments.
+            if let kept { undoKeepingAttachments(kept, ofNoteAt: path) }
+            return
+        }
         // Follow a kept note out of the Incognito list.
         if keeps, sidebarSelection == .incognito, selectedNoteID == relativePath(of: target) {
             sidebarSelection = folderPath.isEmpty ? .allNotes : .folder(folderPath)
@@ -625,11 +631,13 @@ enum GitState: Equatable {
 
     /// Copies the files an incognito note links in `.incognito/assets/` into `assets/` and points its links at the
     /// copies, so they outlive the incognito folder once the note is kept.
-    private func keepIncognitoAttachments(ofNoteAt path: String) {
-        guard let text = currentText(ofNoteAt: path) else { return }
+    /// Returns what `undoKeepingAttachments` needs when the note then can't move, or nil when nothing changed.
+    private func keepIncognitoAttachments(ofNoteAt path: String) -> (text: String, copies: [URL])? {
+        guard let text = currentText(ofNoteAt: path) else { return nil }
         let incognitoAssets = RepositoryLayout.incognitoFolderName + "/" + Attachments.folderName + "/"
         let sources = Set(AssetReferences.links(in: text, notePath: path, rootPath: contentURL.path).compactMap(\.repositoryPath))
         var updated = text
+        var copies: [URL] = []
         for source in sources.sorted() where source.hasPrefix(incognitoAssets) {
             let file = fileURL(for: source)
             guard FileManager.default.fileExists(atPath: file.path) else { continue }
@@ -637,31 +645,46 @@ enum GitState: Equatable {
                 try FileManager.default.createDirectory(at: assetsURL, withIntermediateDirectories: true)
                 let copy = Attachments.uniqueURL(in: assetsURL, fileName: file.lastPathComponent)
                 try FileManager.default.copyItem(at: file, to: copy)
+                copies.append(copy)
                 updated = AssetReferences.renaming(source, to: relativePath(of: copy), in: updated, notePath: path, rootPath: contentURL.path)
             } catch {
                 errorMessage = "Couldn't keep the attachment “\(file.lastPathComponent)”: \(error.localizedDescription)"
             }
         }
-        guard updated != text else { return }
-        if let editor, editor.path == path {
-            editor.replaceText(updated, markSaved: false)
-            editor.save()
-        } else {
-            try? SafeFileWriter.write(Data(updated.utf8), to: fileURL(for: path))
-            _ = scanSingle(path)
-        }
+        guard updated != text else { return nil }
+        setText(updated, ofNoteAt: path)
         didAddAssets()
+        refreshAssetFiles()
+        return (text, copies)
+    }
+
+    /// Puts an incognito note's links back and removes the copies when keeping it failed, so nothing of it is committed.
+    private func undoKeepingAttachments(_ kept: (text: String, copies: [URL]), ofNoteAt path: String) {
+        for copy in kept.copies { try? FileManager.default.removeItem(at: copy) }
+        setText(kept.text, ofNoteAt: path)
         refreshAssetFiles()
     }
 
-    private func move(note: Note, to target: URL) {
+    /// Replaces a note's full text, through the editor when it's open.
+    private func setText(_ text: String, ofNoteAt path: String) {
+        if let editor, editor.path == path {
+            editor.replaceText(text, markSaved: false)
+            editor.save()
+        } else {
+            try? SafeFileWriter.write(Data(text.utf8), to: fileURL(for: path))
+            _ = scanSingle(path)
+        }
+    }
+
+    @discardableResult
+    private func move(note: Note, to target: URL) -> Bool {
         let wasOpen = editor?.path == note.path
         if wasOpen { editor?.save() }
         do {
             try FileManager.default.moveItem(at: note.url, to: target)
         } catch {
             errorMessage = "Couldn't move “\(note.fileName)”: \(error.localizedDescription)"
-            return
+            return false
         }
         let newPath = relativePath(of: target)
         removeNote(note.path)
@@ -675,6 +698,7 @@ enum GitState: Equatable {
         autoCommitter?.markDirty()
         updatePendingState()
         Task { await reload() }
+        return true
     }
 
     /// Updates the selection to a renamed path while keeping the open editor (and its undo stack).
@@ -1001,8 +1025,9 @@ enum GitState: Equatable {
     /// so attachments never reach history as plain blobs, plus a recording in progress. `.incognito/` ignores itself;
     /// it's excluded too in case something un-ignores it.
     private var commitExclusions: [String] {
-        [RepositoryLayout.incognitoFolderName]
-            + (lfsEnabled ? [] : [gitPath(Attachments.folderName)]) + (recordingAsset.map { [gitPath($0)] } ?? [])
+        // Without LFS, the old root `assets/` too: the move into `files/` must not commit its files' deletion alone.
+        let assets = layout.contentFolder == nil ? [Attachments.folderName] : [gitPath(Attachments.folderName), Attachments.folderName]
+        return [RepositoryLayout.incognitoFolderName] + (lfsEnabled ? [] : assets) + (recordingAsset.map { [gitPath($0)] } ?? [])
     }
 
     /// Sets up LFS once attachments exist and `git lfs` is available; flags a missing install.
@@ -1128,7 +1153,7 @@ enum GitState: Equatable {
             guard let self else { return }
             switch event {
             case .started:
-                recordingAsset = Attachments.folderName + "/" + url.lastPathComponent
+                recordingAsset = relativePath(of: url)
                 autoCommitter?.excludedPaths = commitExclusions
                 let placeholder = Attachments.markdownLink(name: Self.recordingLabel, destination: importer.relativeDestination(to: url), kind: .audio)
                 insert(Attachments.ownLine(placeholder, in: currentText(ofNoteAt: path) ?? "", at: offset), intoNoteAt: path, atFullTextOffset: offset)
