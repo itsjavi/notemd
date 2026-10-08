@@ -113,7 +113,7 @@ import SwiftUI
             return .repository
         }
         if NoteMDCore.noteExtensions.contains(url.pathExtension.lowercased()),
-           let controller = controllers.first(where: { url.path.hasPrefix($0.store.rootURL.path + "/") }) {
+           let controller = controllers.first(where: { url.path.hasPrefix($0.store.contentURL.canonical.path + "/") }) {
             let store = controller.store
             let path = store.relativePath(of: url)
             if !path.split(separator: "/").contains(where: { $0.hasPrefix(".") }) {
@@ -311,8 +311,9 @@ enum RepositorySeeder {
         try fileManager.createDirectory(at: url, withIntermediateDirectories: true)
         let existing = (try? fileManager.contentsOfDirectory(atPath: url.path)) ?? []
         guard existing.filter({ !$0.hasPrefix(".") }).isEmpty else { return }
-        try welcome.write(to: url.appendingPathComponent("Welcome to NoteMD.md"), atomically: true, encoding: .utf8)
-        let templates = url.appendingPathComponent("Templates", isDirectory: true)
+        let notes = try RepositoryLayout.moveIntoNotesFolder([], at: url).contentURL(in: url)
+        try welcome.write(to: notes.appendingPathComponent("Welcome to NoteMD.md"), atomically: true, encoding: .utf8)
+        let templates = notes.appendingPathComponent("Templates", isDirectory: true)
         try fileManager.createDirectory(at: templates, withIntermediateDirectories: true)
         try FolderAppearance(icon: "wand.and.stars", color: .amber).save(to: templates)
         try promptTemplate.write(to: templates.appendingPathComponent("Code Review Prompt.md"), atomically: true, encoding: .utf8)

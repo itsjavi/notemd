@@ -55,18 +55,34 @@ public enum RepositoryScanner {
                 continue
             }
             guard NoteMDCore.noteExtensions.contains(item.pathExtension.lowercased()) else { continue }
-            let modified = values?.contentModificationDate ?? .distantPast
-            let size = values?.fileSize ?? 0
-            if let cached = previous[itemPath], cached.modified == modified, cached.size == size {
-                notes.append(cached)
-            } else if let text = readText(item) {
-                notes.append(Note(path: itemPath, url: item, text: text, modified: modified, created: values?.creationDate ?? modified, size: size))
-            }
+            if let note = note(at: item, path: itemPath, values: values, previous: previous) { notes.append(note) }
             folder.noteCount += 1
         }
         folder.children = children.sorted { $0.name.localizedStandardCompare($1.name) == .orderedAscending }
         folder.totalNoteCount = folder.noteCount + folder.children.reduce(0) { $0 + $1.totalNoteCount }
         return folder
+    }
+
+    /// The notes directly inside `directory` (sub-folders aren't read), with paths starting `pathPrefix/`.
+    /// Empty when the folder doesn't exist.
+    public static func scanNotes(in directory: URL, pathPrefix: String, previous: [String: Note] = [:]) -> [Note] {
+        let keys: [URLResourceKey] = [.isRegularFileKey, .isSymbolicLinkKey, .contentModificationDateKey, .creationDateKey, .fileSizeKey]
+        let contents = (try? FileManager.default.contentsOfDirectory(at: directory.canonical, includingPropertiesForKeys: keys, options: [.skipsHiddenFiles])) ?? []
+        return contents.compactMap { item in
+            let values = try? item.resourceValues(forKeys: Set(keys))
+            guard values?.isRegularFile == true, values?.isSymbolicLink != true,
+                  NoteMDCore.noteExtensions.contains(item.pathExtension.lowercased()) else { return nil }
+            return note(at: item, path: pathPrefix + "/" + item.lastPathComponent, values: values, previous: previous)
+        }
+    }
+
+    /// The note at `item`, reusing `previous[path]` when its size and modification date still match.
+    private static func note(at item: URL, path: String, values: URLResourceValues?, previous: [String: Note]) -> Note? {
+        let modified = values?.contentModificationDate ?? .distantPast
+        let size = values?.fileSize ?? 0
+        if let cached = previous[path], cached.modified == modified, cached.size == size { return cached }
+        guard let text = readText(item) else { return nil }
+        return Note(path: path, url: item, text: text, modified: modified, created: values?.creationDate ?? modified, size: size)
     }
 
     /// Reads a text file as UTF-8, falling back to other common encodings.

@@ -1,4 +1,5 @@
 import AppKit
+import NoteMDCore
 import SwiftUI
 
 @main
@@ -24,6 +25,9 @@ struct NoteMDCommands: Commands {
         CommandGroup(replacing: .newItem) {
             Button("New Note") { store?.createNote() }
                 .keyboardShortcut("n")
+                .disabled(store == nil)
+            Button("New Incognito Note") { store?.createIncognitoNote() }
+                .keyboardShortcut("n", modifiers: [.command, .control])
                 .disabled(store == nil)
             Button("New Folder…") { store?.beginCreateFolder() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
@@ -88,7 +92,7 @@ struct NoteMDCommands: Commands {
                 if let store, let path = store.editor?.path { store.sheet = .history(path: path) }
             }
             .keyboardShortcut("y", modifiers: [.command, .option])
-            .disabled(store?.editor == nil || store?.git == nil)
+            .disabled(store?.editor == nil || store?.git == nil || RepositoryLayout.isIncognitoPath(store?.editor?.path ?? ""))
             Button("Show in Finder") {
                 if let store, let path = store.editor?.path { store.reveal(path) }
             }

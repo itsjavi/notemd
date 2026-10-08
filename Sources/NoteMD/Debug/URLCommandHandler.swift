@@ -31,7 +31,7 @@ enum DebugHooks {
         // Optional `repo=<path suffix>` targets a specific repository window.
         targetRepo = query["repo"]
         for key in ["note", "path", "folder", "parent", "asset"] {
-            if let value = query[key], !SafeFileWriter.isSafeRelativePath(value) && safePath(value) == nil { return }
+            if let value = query[key], !RepositoryLayout.isSafeNotePath(value) && safePath(value) == nil { return }
         }
         if verb.hasPrefix("ui/"), let store, safePath(store.rootURL.path) == nil { return }
         switch verb {
@@ -60,6 +60,7 @@ enum DebugHooks {
                 case "templates": store.sidebarSelection = .templates
                 case "deleted": store.sidebarSelection = .recentlyDeleted
                 case "assets": store.sidebarSelection = .assets
+                case "incognito": store.sidebarSelection = .incognito
                 default: store.sidebarSelection = .allNotes
                 }
             }
@@ -72,7 +73,11 @@ enum DebugHooks {
         case "ui/mode":
             if let mode = EditorMode(rawValue: query["value"] ?? "") { AppSettings.shared.editorMode = mode }
         case "ui/new-note":
-            store?.createNote(title: query["title"], body: query["body"])
+            if query["incognito"] == "1" {
+                store?.createIncognitoNote(title: query["title"], body: query["body"])
+            } else {
+                store?.createNote(title: query["title"], body: query["body"])
+            }
         case "ui/type":
             if let editor = store?.editor, let text = query["text"] {
                 editor.replaceText(editor.fullText + text, markSaved: false)
@@ -110,7 +115,7 @@ enum DebugHooks {
             Task {
                 do {
                     guard let git = store.git else { store.errorMessage = "restore: no git"; return }
-                    guard let content = try await git.content(of: path, at: revision) else { store.errorMessage = "restore: no content"; return }
+                    guard let content = try await git.content(of: store.gitPath(path), at: revision) else { store.errorMessage = "restore: no content"; return }
                     await store.restore(path: path, content: content, revision: revision)
                 } catch {
                     store.errorMessage = "restore: \(error)"
@@ -124,6 +129,11 @@ enum DebugHooks {
             if let store, let note = query["note"], let name = query["name"] { store.renameNote(note, to: name) }
         case "ui/trash":
             if let store, let path = query["note"] { store.trashNote(path) }
+        case "ui/delete-incognito":
+            // As confirmed in the dialog `ui/trash` shows for incognito notes.
+            if let store, let path = query["note"] { store.deleteIncognitoNote(path) }
+        case "ui/close-repo":
+            if let store, let controller = windows.controllers.first(where: { $0.store === store }) { controller.window?.close() }
         case "ui/asset-filter":
             if let filter = AssetFilter(rawValue: query["value"] ?? "") { store?.assetFilter = filter }
         case "ui/asset-select":
@@ -434,6 +444,7 @@ enum DebugHooks {
             lines.append("search: \(store.searchText)")
             lines.append("visible: \(store.visibleNotes.map(\.id))")
             lines.append("deleted: \(store.deletedFiles.map(\.path))")
+            lines.append("incognito: \(store.incognitoNotes.map(\.path).sorted()) pendingDelete: \(store.incognitoNotePendingDelete ?? "-")")
             lines.append("assets: \(store.assetRows(.all).map { "\($0.path)=\($0.isMissing ? "missing" : String($0.notes.count))" })")
             lines.append("assetFilter: \(store.assetFilter.rawValue) selectedAsset: \(store.selectedAssetPath ?? "-")")
             if let path = store.selectedNoteID {
@@ -443,6 +454,7 @@ enum DebugHooks {
             lines.append("selected: \(store.selectedNoteID ?? "-")")
             lines.append("sheet: \(store.sheet?.id ?? "-")")
             lines.append("git: \(store.gitState)")
+            lines.append("layout: \(store.layout.contentFolder ?? "root")")
             lines.append("lfsMissing: \(store.lfsMissing)")
             lines.append("recording: \(store.voiceRecorder.isRecording)")
             lines.append("error: \(store.errorMessage ?? "-")")

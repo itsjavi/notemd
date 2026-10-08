@@ -5,6 +5,7 @@ import Observation
 enum SidebarItem: Hashable {
     case allNotes
     case templates
+    case incognito
     case recentlyDeleted
     case assets
     case folder(String)
@@ -84,11 +85,21 @@ enum GitState: Equatable {
 /// Everything a repository window shows: the notes tree, selection, the open note and versioning.
 @Observable final class RepositoryStore: Identifiable {
     let id = UUID()
+    /// The repository: git, window identity and NoteMD's own folders next to the notes.
     let rootURL: URL
+    /// Where notes, folders and assets live (decision-8): `files/`, or the root for folders NoteMD doesn't rearrange.
+    /// Note paths are relative to it; git paths to `rootURL` (see `gitPath(_:)`).
+    @ObservationIgnored private(set) var layout: RepositoryLayout
+    var contentURL: URL { layout.contentURL(in: rootURL) }
     let settings = AppSettings.shared
 
     private(set) var root: Folder
+    /// Versioned notes. Incognito notes are kept apart, so lists, tags and the asset index never see them.
     private(set) var notes: [Note] = []
+    /// Notes in `.incognito/` (TASK-47): never committed, deleted when the repository closes.
+    private(set) var incognitoNotes: [Note] = []
+    /// An incognito note waiting for the delete-for-good confirmation.
+    var incognitoNotePendingDelete: String?
     private(set) var tags: [TagCount] = []
     private(set) var isLoaded = false
     private(set) var visibleNotes: [NoteRow] = []
@@ -148,37 +159,62 @@ enum GitState: Equatable {
     @ObservationIgnored private var isScanning = false
     @ObservationIgnored private var needsRescan = false
     @ObservationIgnored private var commitDelayObservation = false
+    /// Notes were just moved from the root into `files/`: committed as one change once versioning starts.
+    @ObservationIgnored private var movedIntoNotesFolder = false
+    @ObservationIgnored private var isClosed = false
 
     var name: String { rootURL.lastPathComponent }
     var displayPath: String { PathDisplay.abbreviate(rootURL) }
 
     init(rootURL: URL) {
         self.rootURL = rootURL.canonical
-        root = Folder(path: "", name: rootURL.lastPathComponent, appearance: FolderAppearance.load(from: rootURL))
+        layout = RepositoryVetting.isTopLevel(self.rootURL) ? .root : .existing(at: self.rootURL)
+        root = Folder(path: "", name: rootURL.lastPathComponent, appearance: FolderAppearance.load(from: layout.contentURL(in: self.rootURL)))
     }
 
     // MARK: Lifecycle
 
     func start() {
-        watcher = FileWatcher(url: rootURL) { [weak self] paths in self?.filesChanged(paths) }
         Task {
+            await prepareLayout()
+            guard !isClosed else { return }
+            watcher = FileWatcher(url: rootURL) { [weak self] paths in self?.filesChanged(paths) }
             await reload()
             await setUpGit()
         }
         observeCommitDelay()
     }
 
-    /// Saves the open note, applies an automatic name and commits everything pending.
+    /// Moves notes from the root into `files/` (decision-8) before anything reads them.
+    private func prepareLayout() async {
+        let rootURL = self.rootURL
+        let result = await Task.detached {
+            // Left over from a crash: incognito notes never outlive the window that had them.
+            RepositoryLayout.discardIncognitoFolder(at: rootURL)
+            return RepositoryVetting.prepareLayout(rootURL)
+        }.value
+        layout = result.layout
+        movedIntoNotesFolder = result.moved
+        if let error = result.error {
+            errorMessage = "Couldn't move the notes into “\(RepositoryLayout.filesFolderName)”: \(error.localizedDescription)"
+        }
+        root = Folder(path: "", name: name, appearance: FolderAppearance.load(from: contentURL))
+    }
+
+    /// Saves the open note, applies an automatic name, commits everything pending and discards incognito notes.
     func close() async {
+        isClosed = true
         voiceRecorder.stop()
         if let editor {
+            // Also for incognito notes: it settles pending saves that would otherwise recreate the file.
             editor.save()
-            finalizeName(of: editor.path)
+            if !RepositoryLayout.isIncognitoPath(editor.path) { finalizeName(of: editor.path) }
         }
         watcher?.stop()
         watcher = nil
         await autoCommitter?.flush()
         autoCommitter?.cancel()
+        RepositoryLayout.discardIncognitoFolder(at: rootURL)
     }
 
     private func observeCommitDelay() {
@@ -206,19 +242,22 @@ enum GitState: Equatable {
         defer { isScanning = false }
         repeat {
             needsRescan = false
-            let rootURL = self.rootURL
+            let rootURL = contentURL
+            let incognitoURL = self.incognitoURL
             let previous = notesByPath
             let previousIndex = assetIndex
             do {
-                let (snapshot, index) = try await Task.detached {
+                let (snapshot, incognito, index) = try await Task.detached {
                     let snapshot = try RepositoryScanner.scan(rootURL: rootURL, previous: previous)
+                    let incognito = RepositoryScanner.scanNotes(in: incognitoURL, pathPrefix: RepositoryLayout.incognitoFolderName, previous: previous)
                     // Only changed bodies are parsed again.
                     var index = previousIndex
                     for note in snapshot.notes { index.update(notePath: note.path, body: note.body, rootPath: rootURL.path) }
                     index.retain(notePaths: Set(snapshot.notes.map(\.path)))
-                    return (snapshot, index)
+                    return (snapshot, incognito, index)
                 }.value
                 assetIndex = index
+                incognitoNotes = incognito
                 apply(snapshot)
                 refreshAssetFiles()
             } catch {
@@ -230,7 +269,7 @@ enum GitState: Equatable {
     private func apply(_ snapshot: RepositorySnapshot) {
         root = snapshot.root
         notes = snapshot.notes
-        notesByPath = Dictionary(snapshot.notes.map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
+        notesByPath = Dictionary((snapshot.notes + incognitoNotes).map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
         tags = snapshot.allTags.map { TagCount(tag: $0.tag, count: $0.count) }
         isLoaded = true
         if case .folder(let path) = sidebarSelection, root.find(path) == nil { sidebarSelection = .allNotes }
@@ -239,7 +278,7 @@ enum GitState: Equatable {
     }
 
     private func filesChanged(_ paths: [String]) {
-        let rootPath = rootURL.path
+        let rootPath = contentURL.path
         let relevant = paths.compactMap { path -> String? in
             guard path == rootPath || path.hasPrefix(rootPath + "/") else { return nil }
             let relative = String(path.dropFirst(rootPath.count + 1))
@@ -311,6 +350,7 @@ enum GitState: Equatable {
         switch sidebarSelection {
         case .allNotes, .none: "All Notes"
         case .templates: "Templates"
+        case .incognito: "Incognito"
         case .recentlyDeleted: "Recently Deleted"
         case .assets: "Assets"
         case .folder(let path): path.isEmpty ? name : (root.find(path)?.name ?? (path as NSString).lastPathComponent)
@@ -321,7 +361,10 @@ enum GitState: Equatable {
     func refreshVisibleNotes() {
         let query = SearchQuery(searchText)
         var pool: [Note]
-        if !query.isEmpty && searchScope == .everywhere {
+        if sidebarSelection == .incognito {
+            // Incognito notes are only listed and searched here.
+            pool = incognitoNotes
+        } else if !query.isEmpty && searchScope == .everywhere {
             pool = notes
         } else {
             pool = notes.filter(matchesSelection)
@@ -338,7 +381,7 @@ enum GitState: Equatable {
         switch sidebarSelection {
         case .allNotes, .none: true
         case .templates: note.isTemplate
-        case .recentlyDeleted, .assets: false
+        case .incognito, .recentlyDeleted, .assets: false
         case .folder(let path):
             if path.isEmpty { settings.includeSubfolders || note.folderPath.isEmpty }
             else { note.folderPath == path || (settings.includeSubfolders && note.folderPath.hasPrefix(path + "/")) }
@@ -359,6 +402,7 @@ enum GitState: Equatable {
     /// The folder new notes go into for the current selection.
     var targetFolderPath: String {
         if case .folder(let path) = sidebarSelection { return path }
+        if sidebarSelection == .incognito { return RepositoryLayout.incognitoFolderName }
         return ""
     }
 
@@ -400,7 +444,7 @@ enum GitState: Equatable {
     }
 
     private func scanSingle(_ path: String) -> Note? {
-        let url = rootURL.appendingPathComponent(path)
+        let url = fileURL(for: path)
         guard let text = RepositoryScanner.readText(url) else { return nil }
         let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .creationDateKey, .fileSizeKey])
         let note = Note(path: path, url: url, text: text, modified: values?.contentModificationDate ?? Date(), created: values?.creationDate ?? Date(), size: values?.fileSize ?? 0)
@@ -409,8 +453,16 @@ enum GitState: Equatable {
     }
 
     private func upsert(_ note: Note) {
-        assetIndex.update(notePath: note.path, body: note.body, rootPath: rootURL.path)
         notesByPath[note.path] = note
+        if RepositoryLayout.isIncognitoPath(note.path) {
+            if let index = incognitoNotes.firstIndex(where: { $0.path == note.path }) {
+                incognitoNotes[index] = note
+            } else {
+                incognitoNotes.append(note)
+            }
+            return
+        }
+        assetIndex.update(notePath: note.path, body: note.body, rootPath: contentURL.path)
         if let index = notes.firstIndex(where: { $0.path == note.path }) {
             notes[index] = note
         } else {
@@ -418,15 +470,24 @@ enum GitState: Equatable {
         }
     }
 
+    /// Forgets the note at `path` (its file is gone or moved).
+    private func removeNote(_ path: String) {
+        notesByPath[path] = nil
+        notes.removeAll { $0.path == path }
+        incognitoNotes.removeAll { $0.path == path }
+        assetIndex.remove(notePath: path)
+    }
+
     private func noteSaved(_ editor: NoteEditor) {
         let values = try? editor.url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         let previous = notesByPath[editor.path]
         let note = Note(path: editor.path, url: editor.url, text: editor.fullText, modified: values?.contentModificationDate ?? Date(), created: previous?.created ?? Date(), size: values?.fileSize ?? 0)
         upsert(note)
+        refreshVisibleNotes()
+        guard !RepositoryLayout.isIncognitoPath(note.path) else { return }
         if previous?.tags != note.tags {
             tags = RepositorySnapshot(root: root, notes: notes).allTags.map { TagCount(tag: $0.tag, count: $0.count) }
         }
-        refreshVisibleNotes()
         autoCommitter?.markDirty()
         updatePendingState()
     }
@@ -442,9 +503,7 @@ enum GitState: Equatable {
         do {
             try FileManager.default.moveItem(at: note.url, to: target)
             let newPath = relativePath(of: target)
-            notesByPath[path] = nil
-            notes.removeAll { $0.path == path }
-            assetIndex.remove(notePath: path)
+            removeNote(path)
             if editor?.path == path { editor?.relocate(path: newPath, url: target) }
             _ = scanSingle(newPath)
             refreshVisibleNotes()
@@ -454,11 +513,28 @@ enum GitState: Equatable {
         }
     }
 
+    /// The note path of a file in the notes folder or `.incognito/`.
     func relativePath(of url: URL) -> String {
         let path = url.canonical.path
-        let rootPath = rootURL.path
+        let incognitoPath = incognitoURL.canonical.path
+        if path.hasPrefix(incognitoPath + "/") {
+            return RepositoryLayout.incognitoFolderName + "/" + path.dropFirst(incognitoPath.count + 1)
+        }
+        let rootPath = contentURL.canonical.path
         guard path == rootPath || path.hasPrefix(rootPath + "/") else { return url.lastPathComponent }
         return String(path.dropFirst(rootPath.count)).trimmingCharacters(in: CharacterSet(charactersIn: "/"))
+    }
+
+    /// The file at a note path (notes, folders, assets; `.incognito/…` sits next to the notes folder).
+    func fileURL(for path: String) -> URL {
+        RepositoryLayout.isIncognitoPath(path) ? rootURL.appendingPathComponent(path) : contentURL.appendingPathComponent(path)
+    }
+
+    var incognitoURL: URL { rootURL.appendingPathComponent(RepositoryLayout.incognitoFolderName, isDirectory: true) }
+
+    /// The git path of a note path.
+    func gitPath(_ path: String) -> String {
+        layout.repositoryPath(forContentPath: path)
     }
 
     /// Only folders from the scanned tree: drag payloads and links can't reach outside the repository.
@@ -467,7 +543,8 @@ enum GitState: Equatable {
     }
 
     func url(forFolder path: String) -> URL {
-        path.isEmpty ? rootURL : rootURL.appendingPathComponent(path, isDirectory: true)
+        if path.isEmpty { return contentURL }
+        return RepositoryLayout.isIncognitoPath(path) ? rootURL.appendingPathComponent(path, isDirectory: true) : contentURL.appendingPathComponent(path, isDirectory: true)
     }
 
     // MARK: Note operations
@@ -487,7 +564,9 @@ enum GitState: Equatable {
             frontMatter.setTags(noteTags)
             markdown.frontMatter = frontMatter
         }
+        let isIncognito = RepositoryLayout.isIncognitoPath(folder)
         do {
+            if isIncognito { try RepositoryLayout.prepareIncognitoFolder(at: rootURL) }
             try FileManager.default.createDirectory(at: directory, withIntermediateDirectories: true)
             try Data(markdown.text.utf8).write(to: target, options: .withoutOverwriting)
         } catch {
@@ -497,17 +576,27 @@ enum GitState: Equatable {
         let path = relativePath(of: target)
         _ = scanSingle(path)
         searchText = ""
-        if folderPath != nil, sidebarSelection != .folder(folder), sidebarSelection != .allNotes {
+        if isIncognito {
+            sidebarSelection = .incognito
+        } else if folderPath != nil, sidebarSelection != .folder(folder), sidebarSelection != .allNotes {
             sidebarSelection = folder.isEmpty ? .allNotes : .folder(folder)
-        } else if [.templates, .recentlyDeleted, .assets, nil].contains(sidebarSelection) {
+        } else if [.templates, .incognito, .recentlyDeleted, .assets, nil].contains(sidebarSelection) {
             sidebarSelection = .allNotes
         }
         refreshVisibleNotes()
         selectedNoteID = path
         editor?.wantsFocus = true
-        autoCommitter?.markDirty()
-        updatePendingState()
+        if !isIncognito {
+            autoCommitter?.markDirty()
+            updatePendingState()
+        }
         return path
+    }
+
+    /// A note in `.incognito/`: never committed, deleted when the window closes.
+    @discardableResult
+    func createIncognitoNote(title: String? = nil, body: String? = nil) -> String? {
+        createNote(in: RepositoryLayout.incognitoFolderName, title: title, body: body)
     }
 
     func renameNote(_ path: String, to newName: String) {
@@ -518,10 +607,49 @@ enum GitState: Equatable {
         move(note: note, to: target)
     }
 
+    /// Moves a note into a folder of the notes tree. An incognito note moved there is kept: it's versioned from now on.
     func moveNote(_ path: String, toFolder folderPath: String) {
         guard let note = notesByPath[path], note.folderPath != folderPath, isKnownFolder(folderPath) else { return }
+        let keeps = RepositoryLayout.isIncognitoPath(path)
+        if keeps { keepIncognitoAttachments(ofNoteAt: path) }
+        guard let note = notesByPath[path] else { return }
         let target = NoteFileName.uniqueURL(in: url(forFolder: folderPath), base: note.baseName, pathExtension: note.url.pathExtension)
         move(note: note, to: target)
+        // Follow a kept note out of the Incognito list.
+        if keeps, sidebarSelection == .incognito, selectedNoteID == relativePath(of: target) {
+            sidebarSelection = folderPath.isEmpty ? .allNotes : .folder(folderPath)
+        }
+    }
+
+    /// Copies the files an incognito note links in `.incognito/assets/` into `assets/` and points its links at the
+    /// copies, so they outlive the incognito folder once the note is kept.
+    private func keepIncognitoAttachments(ofNoteAt path: String) {
+        guard let text = currentText(ofNoteAt: path) else { return }
+        let incognitoAssets = RepositoryLayout.incognitoFolderName + "/" + Attachments.folderName + "/"
+        let sources = Set(AssetReferences.links(in: text, notePath: path, rootPath: contentURL.path).compactMap(\.repositoryPath))
+        var updated = text
+        for source in sources.sorted() where source.hasPrefix(incognitoAssets) {
+            let file = fileURL(for: source)
+            guard FileManager.default.fileExists(atPath: file.path) else { continue }
+            do {
+                try FileManager.default.createDirectory(at: assetsURL, withIntermediateDirectories: true)
+                let copy = Attachments.uniqueURL(in: assetsURL, fileName: file.lastPathComponent)
+                try FileManager.default.copyItem(at: file, to: copy)
+                updated = AssetReferences.renaming(source, to: relativePath(of: copy), in: updated, notePath: path, rootPath: contentURL.path)
+            } catch {
+                errorMessage = "Couldn't keep the attachment “\(file.lastPathComponent)”: \(error.localizedDescription)"
+            }
+        }
+        guard updated != text else { return }
+        if let editor, editor.path == path {
+            editor.replaceText(updated, markSaved: false)
+            editor.save()
+        } else {
+            try? SafeFileWriter.write(Data(updated.utf8), to: fileURL(for: path))
+            _ = scanSingle(path)
+        }
+        didAddAssets()
+        refreshAssetFiles()
     }
 
     private func move(note: Note, to target: URL) {
@@ -534,9 +662,7 @@ enum GitState: Equatable {
             return
         }
         let newPath = relativePath(of: target)
-        notesByPath[note.path] = nil
-        notes.removeAll { $0.path == note.path }
-        assetIndex.remove(notePath: note.path)
+        removeNote(note.path)
         if wasOpen {
             editor?.relocate(path: newPath, url: target)
             selectedNoteIDWithoutReopen(newPath)
@@ -573,7 +699,12 @@ enum GitState: Equatable {
         autoCommitter?.markDirty()
     }
 
+    /// Moves a note to the Trash. Incognito notes ask first instead: they're deleted for good.
     func trashNote(_ path: String) {
+        guard !RepositoryLayout.isIncognitoPath(path) else {
+            incognitoNotePendingDelete = path
+            return
+        }
         guard let note = notesByPath[path] else { return }
         if editor?.path == path {
             editor?.save()
@@ -586,25 +717,45 @@ enum GitState: Equatable {
             errorMessage = "Couldn't move “\(note.fileName)” to the Trash: \(error.localizedDescription)"
             return
         }
-        notesByPath[path] = nil
-        notes.removeAll { $0.path == path }
-        assetIndex.remove(notePath: path)
-        refreshVisibleNotes()
-        if selectedNoteID == path {
-            if let index, !visibleNotes.isEmpty {
-                selectedNoteID = visibleNotes[min(index, visibleNotes.count - 1)].id
-            } else {
-                selectedNoteID = nil
-            }
-        }
+        removeNote(path)
+        selectNeighbor(ofRemoved: path, at: index)
         autoCommitter?.markDirty()
         updatePendingState()
         Task { await reload() }
     }
 
+    /// Deletes an incognito note for good, after the confirmation: it was never versioned or put in the Bin.
+    func deleteIncognitoNote(_ path: String) {
+        guard RepositoryLayout.isIncognitoPath(path), let note = notesByPath[path] else { return }
+        if editor?.path == path {
+            // Settles a pending save first, so it can't write the file again.
+            editor?.save()
+            editor = nil
+        }
+        let index = visibleNotes.firstIndex { $0.id == path }
+        do {
+            try FileManager.default.removeItem(at: note.url)
+        } catch {
+            errorMessage = "Couldn't delete “\(note.fileName)”: \(error.localizedDescription)"
+            return
+        }
+        removeNote(path)
+        selectNeighbor(ofRemoved: path, at: index)
+    }
+
+    private func selectNeighbor(ofRemoved path: String, at index: Int?) {
+        refreshVisibleNotes()
+        guard selectedNoteID == path else { return }
+        if let index, !visibleNotes.isEmpty {
+            selectedNoteID = visibleNotes[min(index, visibleNotes.count - 1)].id
+        } else {
+            selectedNoteID = nil
+        }
+    }
+
     func reveal(_ path: String) {
-        guard SafeFileWriter.isSafeRelativePath(path) else { return }
-        NSWorkspace.shared.activateFileViewerSelecting([rootURL.appendingPathComponent(path)])
+        guard RepositoryLayout.isSafeNotePath(path) else { return }
+        NSWorkspace.shared.activateFileViewerSelecting([fileURL(for: path)])
     }
 
     // MARK: Folder operations
@@ -699,7 +850,7 @@ enum GitState: Equatable {
             if updated != editor.fullText { editor.replaceText(updated, markSaved: false) }
             return
         }
-        let url = rootURL.appendingPathComponent(path)
+        let url = fileURL(for: path)
         guard let text = RepositoryScanner.readText(url) else { return }
         let updated = Attachments.rewritingAssetLinks(in: text, fromDirectory: oldDirectory, toDirectory: newDirectory)
         guard updated != text else { return }
@@ -713,7 +864,7 @@ enum GitState: Equatable {
     private func relocateOpenNote(fromFolder old: String, toFolder new: String) {
         guard let editor, editor.path.hasPrefix(old + "/") else { return }
         let newPath = new + editor.path.dropFirst(old.count)
-        editor.relocate(path: newPath, url: rootURL.appendingPathComponent(newPath))
+        editor.relocate(path: newPath, url: fileURL(for: newPath))
         selectedNoteIDWithoutReopen(newPath)
     }
 
@@ -742,7 +893,7 @@ enum GitState: Equatable {
             gitState = .disabled("Install git (e.g. Xcode Command Line Tools or Homebrew) to version your notes.")
             return
         }
-        let client = GitClient(repositoryURL: rootURL, executableURL: executable)
+        let client = GitClient(repositoryURL: rootURL, executableURL: executable, messagePathPrefix: layout.contentPrefix)
         if !(await client.isRepositoryRoot()) {
             if let topLevel = try? await client.run(["rev-parse", "--show-toplevel"]).trimmingCharacters(in: .whitespacesAndNewlines), !topLevel.isEmpty {
                 // Paths and commits would refer to the parent repository; stay out of it entirely.
@@ -767,7 +918,7 @@ enum GitState: Equatable {
     /// Turns on versioning after the user confirmed it for this folder.
     func enableVersioning() async {
         guard case .needsConsent = gitState, let executable = gitExecutable else { return }
-        let client = GitClient(repositoryURL: rootURL, executableURL: executable)
+        let client = GitClient(repositoryURL: rootURL, executableURL: executable, messagePathPrefix: layout.contentPrefix)
         gitState = .starting
         do {
             try await initializeRepository(client)
@@ -797,7 +948,12 @@ enum GitState: Equatable {
         autoCommitter = committer
         gitState = .clean(lastCommit: nil)
         Task {
+            // LFS first: moved attachments must be committed through it.
             await configureAssetVersioning()
+            if movedIntoNotesFolder {
+                movedIntoNotesFolder = false
+                await committer.flush(message: "Move notes into \(layout.contentPrefix)")
+            }
             if let timestamp = try? await client.run(["log", "-1", "--format=%at"]).trimmingCharacters(in: .whitespacesAndNewlines),
                let seconds = TimeInterval(timestamp), case .clean = gitState {
                 gitState = .clean(lastCommit: Date(timeIntervalSince1970: seconds))
@@ -833,16 +989,18 @@ enum GitState: Equatable {
 
     // MARK: Attachments
 
-    var assetsURL: URL { rootURL.appendingPathComponent(Attachments.folderName, isDirectory: true) }
+    var assetsURL: URL { contentURL.appendingPathComponent(Attachments.folderName, isDirectory: true) }
     private var hasAssets: Bool { FileManager.default.fileExists(atPath: assetsURL.path) }
     /// The voice note being recorded (repository-relative); kept out of commits until it's finished.
     @ObservationIgnored private var recordingAsset: String?
     @ObservationIgnored private var assetCheck: Task<Void, Never>?
 
     /// Paths left out of commits: `assets/` until Git LFS is set up for the repository (decision-5),
-    /// so attachments never reach history as plain blobs, plus a recording in progress.
+    /// so attachments never reach history as plain blobs, plus a recording in progress. `.incognito/` ignores itself;
+    /// it's excluded too in case something un-ignores it.
     private var commitExclusions: [String] {
-        (lfsEnabled ? [] : [Attachments.folderName]) + (recordingAsset.map { [$0] } ?? [])
+        [RepositoryLayout.incognitoFolderName]
+            + (lfsEnabled ? [] : [gitPath(Attachments.folderName)]) + (recordingAsset.map { [gitPath($0)] } ?? [])
     }
 
     /// Sets up LFS once attachments exist and `git lfs` is available; flags a missing install.
@@ -857,7 +1015,8 @@ enum GitState: Equatable {
         }
         lfsMissing = false
         do {
-            try await client.enableLFS(tracking: Attachments.folderName + "/**")
+            // Rules for an earlier root `assets/` stay: they still apply when restoring files from before the move.
+            try await client.enableLFS(tracking: gitPath(Attachments.folderName) + "/**")
             lfsEnabled = true
         } catch {
             errorMessage = "Couldn't set up Git LFS for the attachments: \(error.localizedDescription)"
@@ -892,10 +1051,14 @@ enum GitState: Equatable {
         attachmentImporter(forFolder: (path as NSString).deletingLastPathComponent)
     }
 
-    /// Copies or links files for notes in the folder at `folderPath` ("" for the root).
+    /// Copies or links files for notes in the folder at `folderPath` ("" for the root). Incognito notes get their own
+    /// `.incognito/assets/`, discarded with them.
     func attachmentImporter(forFolder folderPath: String) -> AttachmentImporter {
-        AttachmentImporter(
-            rootURL: rootURL, noteDirectory: url(forFolder: folderPath),
+        if RepositoryLayout.isIncognitoPath(folderPath) {
+            return AttachmentImporter(rootURL: incognitoURL, noteDirectory: url(forFolder: folderPath), didAddAssets: {})
+        }
+        return AttachmentImporter(
+            rootURL: contentURL, noteDirectory: url(forFolder: folderPath),
             didAddAssets: { [weak self] in self?.didAddAssets() })
     }
 
@@ -911,8 +1074,8 @@ enum GitState: Equatable {
             }
             return
         }
-        let url = rootURL.appendingPathComponent(path)
-        guard SafeFileWriter.isSafeRelativePath(path), let current = RepositoryScanner.readText(url) else {
+        let url = fileURL(for: path)
+        guard RepositoryLayout.isSafeNotePath(path), let current = RepositoryScanner.readText(url) else {
             errorMessage = "Couldn't update “\((path as NSString).lastPathComponent)”: the note is gone."
             return
         }
@@ -942,7 +1105,7 @@ enum GitState: Equatable {
     /// Full text of the note at `path`: the editor's when it's open, else the file's.
     func currentText(ofNoteAt path: String) -> String? {
         if let editor, editor.path == path { return editor.fullText }
-        return RepositoryScanner.readText(rootURL.appendingPathComponent(path))
+        return RepositoryScanner.readText(fileURL(for: path))
     }
 
     // MARK: Voice notes
@@ -1014,7 +1177,7 @@ enum GitState: Equatable {
 
     /// The audio file a `+[…](source)` embed in the note at `path` points at.
     func audioURL(forSource source: String, inNoteAt path: String) -> URL? {
-        Attachments.fileURL(forDestination: source, relativeTo: rootURL.appendingPathComponent(path).deletingLastPathComponent())
+        Attachments.fileURL(forDestination: source, relativeTo: fileURL(for: path).deletingLastPathComponent())
     }
 
     /// Adds `transcript` as a quote right below the line embedding `source` (or at the end).
@@ -1071,7 +1234,7 @@ enum GitState: Equatable {
     /// Restores `path` to `content` from `revision` as a new commit.
     func restore(path: String, content: String, revision: String) async {
         await saveVersionNow()
-        let url = rootURL.appendingPathComponent(path)
+        let url = fileURL(for: path)
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
             try SafeFileWriter.write(Data(content.utf8), to: url)
@@ -1092,11 +1255,15 @@ enum GitState: Equatable {
 
     func loadDeletedFiles() async {
         guard let git else { return }
-        let files = (try? await git.deletedFiles(limit: 200)) ?? []
-        let rootURL = self.rootURL
+        // Listed under their note paths; deletions from before the move into `files/` belong there too.
+        var seen = Set<String>()
+        let files = ((try? await git.deletedFiles(limit: 200)) ?? []).compactMap { file -> GitDeletedFile? in
+            guard let path = layout.contentPath(forRepositoryPath: file.path), seen.insert(path).inserted else { return nil }
+            return file.relocated(to: path)
+        }
         // Assets are listed too; one that is back on disk isn't deleted any more.
         let existing = Set(notesByPath.keys).union(files.map(\.path).filter {
-            RecentlyDeleted.isAsset($0) && FileManager.default.fileExists(atPath: rootURL.appendingPathComponent($0).path)
+            RecentlyDeleted.isAsset($0) && FileManager.default.fileExists(atPath: fileURL(for: $0).path)
         })
         deletedFiles = RecentlyDeleted.visible(files, cleared: clearedDeletions, existingPaths: existing, includingAssets: true)
     }
@@ -1117,9 +1284,16 @@ enum GitState: Equatable {
     /// Restores deleted attachments with `git checkout`, so Git LFS brings back the real file rather than its pointer.
     func restoreDeletedAssets(_ files: [GitDeletedFile]) async {
         guard let git else { return }
-        for file in files where SafeFileWriter.isSafeRelativePath(file.path) {
+        for file in files where SafeFileWriter.isSafeRelativePath(file.path) && SafeFileWriter.isSafeRelativePath(file.repositoryPath) {
             do {
-                _ = try await git.run(["checkout", file.lastRevision, "--", file.path])
+                _ = try await git.run(["checkout", file.lastRevision, "--", file.repositoryPath])
+                if file.repositoryPath != gitPath(file.path) {
+                    // Deleted before the move into `files/`: git brought it back to its old place.
+                    let target = fileURL(for: file.path)
+                    try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
+                    try FileManager.default.moveItem(at: rootURL.appendingPathComponent(file.repositoryPath), to: Attachments.uniqueURL(in: target.deletingLastPathComponent(), fileName: target.lastPathComponent))
+                    removeEmptyFolders(above: file.repositoryPath)
+                }
             } catch {
                 errorMessage = "Couldn't restore “\((file.path as NSString).lastPathComponent)”: \(error.localizedDescription)"
                 continue
@@ -1132,10 +1306,21 @@ enum GitState: Equatable {
         updatePendingState()
     }
 
+    /// Removes the folders `git checkout` created at the root for `repositoryPath` once they're empty again.
+    private func removeEmptyFolders(above repositoryPath: String) {
+        var folder = (repositoryPath as NSString).deletingLastPathComponent
+        while !folder.isEmpty {
+            let url = rootURL.appendingPathComponent(folder)
+            guard (try? FileManager.default.contentsOfDirectory(atPath: url.path))?.allSatisfy({ $0 == ".DS_Store" }) == true else { return }
+            try? FileManager.default.removeItem(at: url)
+            folder = (folder as NSString).deletingLastPathComponent
+        }
+    }
+
     /// After restoring a note, offers to restore the deleted attachments it links.
     private func offerToRestoreAssets(linkedBy path: String, content: String) {
-        let links = AssetReferences.links(in: content, notePath: path, rootPath: rootURL.path)
-        let gone = Set(links.compactMap(\.repositoryPath).filter { !FileManager.default.fileExists(atPath: rootURL.appendingPathComponent($0).path) })
+        let links = AssetReferences.links(in: content, notePath: path, rootPath: contentURL.path)
+        let gone = Set(links.compactMap(\.repositoryPath).filter { !FileManager.default.fileExists(atPath: fileURL(for: $0).path) })
         let files = deletedFiles.filter { gone.contains($0.path) }
         if !files.isEmpty { pendingAssetRestore = PendingAssetRestore(notePath: path, files: files) }
     }
@@ -1145,11 +1330,11 @@ enum GitState: Equatable {
             await restoreDeletedAssets([file])
             return
         }
-        guard let git, let content = try? await git.content(of: file.path, at: file.lastRevision) else {
+        guard let git, let content = try? await git.content(of: file.repositoryPath, at: file.lastRevision) else {
             errorMessage = "Couldn't read the deleted note from history."
             return
         }
-        let original = rootURL.appendingPathComponent(file.path)
+        let original = fileURL(for: file.path)
         let target = FileManager.default.fileExists(atPath: original.path)
             ? NoteFileName.uniqueURL(in: original.deletingLastPathComponent(), base: (original.lastPathComponent as NSString).deletingPathExtension, pathExtension: original.pathExtension)
             : original

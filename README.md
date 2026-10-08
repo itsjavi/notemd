@@ -38,7 +38,10 @@ And while I was at it, a proper editor for every other text file on my Mac. Good
 ## Features
 
 - **Notes are files.** Any folder can be a vault. Open several at once, each in its own window, and switch between
-  recent ones. No database and no proprietary format: just Markdown files in a git repository.
+  recent ones. No database and no proprietary format: just Markdown files in the vault's `files/` folder, in a git
+  repository. Vaults that kept notes at their root are moved into `files/` with one commit the first time they open.
+- **Incognito notes.** Jot something down without a trace (⌃⌘N): incognito notes get their own sidebar section, are
+  never committed and are deleted when you close the window or quit. Move one into a folder to keep it.
 - **Versioned automatically.** Edits are saved as you type and committed a few seconds after you stop (configurable),
   when you close the window, on quit and with ⌘S. Version History shows what changed in each version, compares any of
   them with the current text and restores one as a new commit. Deleted notes can be restored too.
@@ -51,7 +54,7 @@ And while I was at it, a proper editor for every other text file on my Mac. Good
 - **Voice notes.** Record into a note and transcribe the clip with on-device speech recognition. The transcript is added
   below the clip as a quote; the audio never leaves your Mac.
 - **Attachments and video reviews.** Drag or paste images, recordings and other files into a note. They are copied into
-  the vault's `assets/` folder (or linked where they are), stored with Git LFS, and audio and video play inline in the
+  the vault's `files/assets/` folder (or linked where they are), stored with Git LFS, and audio and video play inline in the
   preview. A paperclip in the note list shows which notes have attachments and warns about broken links. The Assets
   view lists every file with where it's used, finds unused and missing ones, and renames or bins them while keeping the
   notes' links right.

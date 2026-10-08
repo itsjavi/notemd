@@ -80,14 +80,23 @@ public struct GitCommit: Sendable, Hashable, Identifiable {
 /// A file deleted somewhere in history and not present again at HEAD or on disk.
 public struct GitDeletedFile: Sendable, Hashable, Identifiable {
     public var id: String { path }
+    /// Where the file belongs now: the git path, or the note path once `relocated(to:)`.
     public let path: String
+    /// The file's path in git history.
+    public let repositoryPath: String
     public let deletedIn: GitCommit
     /// Revision (full SHA of the deleting commit's first parent) that still has the file.
     public let lastRevision: String
 
-    public init(path: String, deletedIn: GitCommit, lastRevision: String) {
+    public init(path: String, deletedIn: GitCommit, lastRevision: String, repositoryPath: String? = nil) {
         self.path = path
+        self.repositoryPath = repositoryPath ?? path
         self.deletedIn = deletedIn
         self.lastRevision = lastRevision
+    }
+
+    /// The same deletion listed under `path`, keeping its git path for reading it from history.
+    public func relocated(to path: String) -> GitDeletedFile {
+        GitDeletedFile(path: path, deletedIn: deletedIn, lastRevision: lastRevision, repositoryPath: repositoryPath)
     }
 }

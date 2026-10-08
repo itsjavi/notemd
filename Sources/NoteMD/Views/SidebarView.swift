@@ -16,6 +16,10 @@ struct SidebarView: View {
                     Label("Templates", systemImage: "wand.and.stars")
                         .badge(store.notes.filter(\.isTemplate).count)
                         .tag(SidebarItem.templates)
+                    Label("Incognito", systemImage: "eye.slash")
+                        .badge(store.incognitoNotes.count)
+                        .tag(SidebarItem.incognito)
+                        .help("Notes that are never versioned and are deleted when this window closes")
                     if !store.assetFiles.isEmpty || !store.assetIndex.referencedPaths.isEmpty {
                         Label("Assets", systemImage: "paperclip")
                             .badge(store.assetFiles.count)

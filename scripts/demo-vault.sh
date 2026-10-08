@@ -2,7 +2,8 @@
 # Builds the curated demo vault used for the README, website and intro video screenshots (see brand/README.md).
 # Usage: scripts/demo-vault.sh [dir] [clip-frame-image]
 #   dir              defaults to /private/tmp/notemd-demo (Test-build hooks only accept temp folders);
-#                    creates <dir>/Notes (the vault, with git history) and <dir>/files/Scratch pad.txt
+#                    creates <dir>/Notes (the vault, with git history and its notes in files/, decision-8)
+#                    and <dir>/files/Scratch pad.txt
 #   clip-frame-image still used for the vault's demo screen recording (default: web/assets/screenshot-dark.webp)
 # Extend it when a new feature needs demo content, so screenshots stay reproducible.
 set -euo pipefail
@@ -10,12 +11,14 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIR="${1:-/private/tmp/notemd-demo}"
 FRAME="${2:-$ROOT/web/assets/screenshot-dark.webp}"
 R="$DIR/Notes"
-rm -rf "$R" "$DIR/files"; mkdir -p "$R"/{Work,Personal,Journal,Prompts,assets} "$DIR/files"
+rm -rf "$R" "$DIR/files"; mkdir -p "$R"/files/{Work,Personal,Journal,Prompts,assets} "$DIR/files"
 cd "$R"
 git init -q -b main
 git config user.name "Ana Rivera"; git config user.email "ana@example.com"
 git lfs install --local >/dev/null
-printf 'assets/** filter=lfs diff=lfs merge=lfs -text\n' > .gitattributes
+printf 'files/assets/** filter=lfs diff=lfs merge=lfs -text\n' > .gitattributes
+# Notes and assets live in files/; git commands below still cover the whole repository.
+cd files
 
 style() { printf '{\n  "color" : "%s",\n  "icon" : "%s"\n}\n' "$2" "$3" > "$1/.notemd.json"; }
 style Work blue briefcase.fill

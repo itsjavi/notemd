@@ -262,11 +262,13 @@ Launch with `open -g "build/NoteMD Test.app"` and send hooks with
 `open -g -a "$PWD/build/NoteMD Test.app" "notemd-test://<verb>?<query>"`. Add `repo=<path suffix>` to target a window
 (`?repo=` when the verb has no other query: `ui/commit-now&repo=x` is not a verb and does nothing).
 Hooks run only in the Test variant and only against repositories under `/private/tmp` or `/private/var/folders`;
-note paths must be plain repository-relative paths.
+note paths must be plain paths relative to the repository's `files/` folder (decision-8), or `.incognito/<name>.md`
+for incognito notes. `debug/state` reports the `layout:` (`files` or `root`) and the `incognito:` notes.
 
 - `ui/create-repo?path=` (seeds example notes), `ui/open-repo?path=`, `ui/open-file?path=`, `ui/welcome`
-- `ui/sidebar?item=all|templates|deleted` or `folder=`/`tag=`, `ui/select?note=`, `ui/search?q=`, `ui/mode?value=edit|split|preview`
-- `ui/new-note?title=&body=`, `ui/type?text=`, `ui/tags?value=a,b`, `ui/folder-style?path=&icon=&color=`
+- `ui/sidebar?item=all|templates|incognito|deleted` or `folder=`/`tag=`, `ui/select?note=`, `ui/search?q=`, `ui/mode?value=edit|split|preview`
+- `ui/new-note?title=&body=[&incognito=1]`, `ui/delete-incognito?note=` (as confirmed; `ui/trash` only asks),
+  `ui/close-repo` (closes the window, discarding its incognito notes), `ui/type?text=`, `ui/tags?value=a,b`, `ui/folder-style?path=&icon=&color=`
 - `ui/sheet?name=history|form|params|rename|folder-new|folder-edit&path=`, `ui/close-sheet`
 - `ui/move?note=&folder=`, `ui/move-folder?path=&parent=`, `ui/rename?note=&name=`, `ui/trash?note=`, `ui/restore-deleted?path=`,
   `ui/remove-deleted?path=|all=1` (hides Recently Deleted entries)

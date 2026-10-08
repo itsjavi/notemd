@@ -92,7 +92,7 @@ struct NoteEditorPane: View {
             scrollLine: settings.editorMode == .split ? scrollLine : nil,
             onOpenNote: { url in
                 // Absolute links can point outside the repository: open those as documents.
-                guard url.canonical.path.hasPrefix(store.rootURL.path + "/") else {
+                guard url.canonical.path.hasPrefix(store.contentURL.canonical.path + "/") else {
                     WindowManager.shared.openFile(url)
                     return
                 }
@@ -132,6 +132,11 @@ private struct NoteHeaderBar: View {
                     .onSubmit(addTag)
                     .accessibilityLabel("Add tag")
                 Spacer(minLength: 8)
+                if RepositoryLayout.isIncognitoPath(editor.path) {
+                    Label("Incognito", systemImage: "eye.slash")
+                        .foregroundStyle(.secondary)
+                        .help("Not versioned, and deleted when this window closes. Move it into a folder to keep it.")
+                }
                 if editor.isTemplate {
                     TemplateBadge(editor: editor)
                 }
@@ -252,7 +257,7 @@ private struct NoteToolbar: ToolbarContent {
             } label: {
                 Label("Version History", systemImage: "clock.arrow.trianglehead.counterclockwise.rotate.90")
             }
-            .disabled(!store.isVersioned && store.git == nil)
+            .disabled(!store.isVersioned && store.git == nil || RepositoryLayout.isIncognitoPath(editor.path))
             .help("Browse and restore earlier versions (⌥⌘Y)")
         }
         ToolbarItem {
@@ -272,7 +277,7 @@ private struct NoteToolbar: ToolbarContent {
                     NSPasteboard.general.setString(editor.fullText, forType: .string)
                 }
                 Divider()
-                Button("Move to Trash", role: .destructive) { store.trashNote(editor.path) }
+                Button(RepositoryLayout.isIncognitoPath(editor.path) ? "Delete…" : "Move to Trash", role: .destructive) { store.trashNote(editor.path) }
             } label: {
                 Label("More", systemImage: "ellipsis")
             }
@@ -304,7 +309,7 @@ private struct DeletedNoteDetail: View {
                     // Attachments may be binary or LFS pointers in history: describe rather than preview.
                     ContentUnavailableView((path as NSString).lastPathComponent, systemImage: AssetDescription.symbol(for: path), description: Text("Restoring brings the file back to \(path), with its full content."))
                 } else if let content {
-                    MarkdownPreview(markdown: content, baseDirectory: store.rootURL.appendingPathComponent(path).deletingLastPathComponent(), accessRoot: store.rootURL)
+                    MarkdownPreview(markdown: content, baseDirectory: store.fileURL(for: path).deletingLastPathComponent(), accessRoot: store.rootURL)
                 } else {
                     ProgressView().frame(maxWidth: .infinity, maxHeight: .infinity)
                 }
@@ -312,7 +317,7 @@ private struct DeletedNoteDetail: View {
             .task(id: path) {
                 content = nil
                 guard !RecentlyDeleted.isAsset(path) else { return }
-                content = (try? await store.git?.content(of: file.path, at: file.lastRevision)) ?? ""
+                content = (try? await store.git?.content(of: file.repositoryPath, at: file.lastRevision)) ?? ""
             }
         } else {
             ContentUnavailableView("Select a Deleted Note", systemImage: "trash", description: Text("Preview it and restore it to its folder."))

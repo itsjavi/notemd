@@ -37,6 +37,17 @@ struct NoteListView: View {
                 }
             }
         }
+        .confirmationDialog(
+            "Delete “\(store.incognitoNotePendingDelete.flatMap { store.note(at: $0)?.title } ?? "")”?",
+            isPresented: Binding(get: { store.incognitoNotePendingDelete != nil }, set: { if !$0 { store.incognitoNotePendingDelete = nil } })
+        ) {
+            Button("Delete", role: .destructive) {
+                if let path = store.incognitoNotePendingDelete { store.deleteIncognitoNote(path) }
+                store.incognitoNotePendingDelete = nil
+            }
+        } message: {
+            Text("Incognito notes aren't versioned or moved to the Bin. This can't be undone.")
+        }
         .navigationTitle(store.selectionTitle)
         .toolbar {
             ToolbarItemGroup {
@@ -66,7 +77,7 @@ struct NoteListView: View {
 
     private var showsFolders: Bool {
         if case .folder(let path) = store.sidebarSelection { return settings.includeSubfolders && !path.isEmpty ? true : false }
-        return true
+        return store.sidebarSelection != .incognito
     }
 
     @ViewBuilder private var emptyState: some View {
@@ -79,6 +90,14 @@ struct NoteListView: View {
                 Text("Turn any note into a template from its ⋯ menu, then add parameters like `{{topic}}` to fill in later.")
             } actions: {
                 Button("New Template") { createTemplate() }
+            }
+        } else if store.sidebarSelection == .incognito {
+            ContentUnavailableView {
+                Label("No Incognito Notes", systemImage: "eye.slash")
+            } description: {
+                Text("Incognito notes are never versioned and are deleted when this window closes. Move one into a folder to keep it.")
+            } actions: {
+                Button("New Incognito Note") { store.createIncognitoNote() }
             }
         } else {
             ContentUnavailableView {
@@ -128,6 +147,10 @@ struct NoteListBackgroundMenu: View {
             sortPicker
         case .templates:
             Button("New Template") { createTemplate() }
+            Divider()
+            sortPicker
+        case .incognito:
+            Button("New Incognito Note") { store.createIncognitoNote() }
             Divider()
             sortPicker
         case .recentlyDeleted, .assets:
@@ -249,25 +272,27 @@ struct NoteContextMenu: View {
             Button("Use Template…") { store.selectedNoteID = path; store.sheet = .templateForm(path: path) }
             Divider()
         }
+        let isIncognito = RepositoryLayout.isIncognitoPath(path)
         Button("Rename…") { store.sheet = .renameNote(path: path) }
         Button("Duplicate") { store.duplicateNote(path) }
-        Menu("Move To") {
+        // Moving an incognito note into the notes keeps it (versioned from then on).
+        Menu(isIncognito ? "Keep In" : "Move To") {
             Button("Notes (top level)") { store.moveNote(path, toFolder: "") }
             ForEach(store.root.descendants) { folder in
                 Button(folder.path) { store.moveNote(path, toFolder: folder.path) }
             }
         }
         Divider()
-        if store.isVersioned {
+        if store.isVersioned && !isIncognito {
             Button("Version History…") { store.selectedNoteID = path; store.sheet = .history(path: path) }
         }
         Button("Show in Finder") { store.reveal(path) }
         Button("Copy Path") {
             NSPasteboard.general.clearContents()
-            NSPasteboard.general.setString(store.rootURL.appendingPathComponent(path).path, forType: .string)
+            NSPasteboard.general.setString(store.fileURL(for: path).path, forType: .string)
         }
         Divider()
-        Button("Move to Trash", role: .destructive) { store.trashNote(path) }
+        Button(isIncognito ? "Delete…" : "Move to Trash", role: .destructive) { store.trashNote(path) }
     }
 }
 

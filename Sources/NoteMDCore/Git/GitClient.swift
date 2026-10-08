@@ -8,11 +8,14 @@ public struct GitClient: Sendable {
     /// Extra environment variables (e.g. `GIT_CONFIG_GLOBAL` to isolate tests). The prompt/pager/locale
     /// overrides are applied after these and always win.
     public let environment: [String: String]
+    /// Left out of paths in generated commit messages: the notes folder (`files/`, decision-8).
+    public let messagePathPrefix: String
 
-    public init(repositoryURL: URL, executableURL: URL, environment: [String: String] = [:]) {
+    public init(repositoryURL: URL, executableURL: URL, environment: [String: String] = [:], messagePathPrefix: String = "") {
         self.repositoryURL = repositoryURL
         self.executableURL = executableURL
         self.environment = environment
+        self.messagePathPrefix = messagePathPrefix
     }
 
     // MARK: Locating git
@@ -176,7 +179,7 @@ public struct GitClient: Sendable {
         if !(await hasIdentity()) {
             arguments += ["-c", "user.name=NoteMD", "-c", "user.email=notemd@localhost"]
         }
-        let message = message ?? CommitMessageBuilder.message(for: staged)
+        let message = message ?? CommitMessageBuilder.message(for: staged, strippingPrefix: messagePathPrefix)
         arguments += ["commit", "--quiet", "--no-verify", "--message=\(message)"]
         try await run(arguments)
 

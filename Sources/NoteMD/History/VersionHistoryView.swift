@@ -129,7 +129,7 @@ struct VersionHistoryView: View {
                         Text(commit.authorName)
                         Text("·")
                         Text(commit.shortID).font(.caption.monospaced())
-                        if let original = commit.path, original != path {
+                        if let original = commit.path.flatMap(store.layout.contentPath(forRepositoryPath:)), original != path {
                             Text("·")
                             Text("was \(original)")
                         }
@@ -211,11 +211,11 @@ struct VersionHistoryView: View {
 
     // MARK: Data
 
-    private var noteDirectory: URL { store.rootURL.appendingPathComponent(path).deletingLastPathComponent() }
+    private var noteDirectory: URL { store.fileURL(for: path).deletingLastPathComponent() }
 
     private var currentText: String {
         if let editor = store.editor, editor.path == path { return editor.fullText }
-        return RepositoryScanner.readText(store.rootURL.appendingPathComponent(path)) ?? ""
+        return RepositoryScanner.readText(store.fileURL(for: path)) ?? ""
     }
 
     private func previousContent(of id: String) -> String? {
@@ -233,7 +233,7 @@ struct VersionHistoryView: View {
         }
         store.editor?.save()
         do {
-            commits = try await git.history(for: path)
+            commits = try await git.history(for: store.gitPath(path))
             selection = commits.first?.id ?? Self.currentID
         } catch {
             loadError = error.localizedDescription
@@ -247,7 +247,7 @@ struct VersionHistoryView: View {
         if index + 1 < commits.count { needed.append(commits[index + 1]) }
         for (offset, commit) in needed.enumerated() where contents[commit.id] == nil {
             do {
-                if let text = try await git.content(of: commit.path ?? path, at: commit.id) {
+                if let text = try await git.content(of: commit.path ?? store.gitPath(path), at: commit.id) {
                     contents[commit.id] = text
                 } else if offset == 0 {
                     // The selected version must exist; an older one may legitimately be missing (creation).

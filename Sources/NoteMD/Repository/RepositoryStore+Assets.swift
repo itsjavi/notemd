@@ -82,13 +82,13 @@ extension RepositoryStore {
 
     func fileURL(for link: AssetLink) -> URL {
         switch link.location {
-        case .repository(let path): rootURL.appendingPathComponent(path)
+        case .repository(let path): fileURL(for: path)
         case .external(let path): URL(fileURLWithPath: path)
         }
     }
 
     private func fileExists(_ path: String) -> Bool {
-        FileManager.default.fileExists(atPath: rootURL.appendingPathComponent(path).path)
+        FileManager.default.fileExists(atPath: fileURL(for: path).path)
     }
 
     func openNote(_ path: String) {
@@ -105,7 +105,7 @@ extension RepositoryStore {
         if let editor, editor.path == path {
             current = editor.fullText
         } else {
-            guard SafeFileWriter.isSafeRelativePath(path), let text = RepositoryScanner.readText(rootURL.appendingPathComponent(path)) else { return }
+            guard SafeFileWriter.isSafeRelativePath(path), let text = RepositoryScanner.readText(fileURL(for: path)) else { return }
             current = text
         }
         guard let change = Self.change(from: current, to: transform(current)) else { return }
@@ -137,7 +137,7 @@ extension RepositoryStore {
 
     /// Removes the links to `assetPath` from a note; the file stays (and shows under Unused when nothing else uses it).
     func unlinkAsset(_ assetPath: String, fromNoteAt notePath: String) {
-        let root = rootURL.path
+        let root = contentURL.path
         rewriteNote(at: notePath) { AssetReferences.unlinking(assetPath, in: $0, notePath: notePath, rootPath: root) }
     }
 
@@ -145,7 +145,7 @@ extension RepositoryStore {
 
     /// Renames the file and points every note that links it at the new name.
     func renameAsset(_ path: String, to name: String) {
-        let old = rootURL.appendingPathComponent(path)
+        let old = fileURL(for: path)
         guard SafeFileWriter.isSafeRelativePath(path), FileManager.default.fileExists(atPath: old.path) else { return }
         let ext = old.pathExtension
         var base = name.trimmingCharacters(in: .whitespacesAndNewlines)
@@ -161,7 +161,7 @@ extension RepositoryStore {
             return
         }
         let newPath = relativePath(of: target)
-        let root = rootURL.path
+        let root = contentURL.path
         for note in users {
             rewriteNote(at: note) { AssetReferences.renaming(path, to: newPath, in: $0, notePath: note, rootPath: root) }
         }
@@ -172,7 +172,7 @@ extension RepositoryStore {
     /// Moves files to the Bin and removes their links from the notes that use them.
     func trashAssets(_ paths: [String]) {
         for path in paths {
-            let url = rootURL.appendingPathComponent(path)
+            let url = fileURL(for: path)
             guard SafeFileWriter.isSafeRelativePath(path), FileManager.default.fileExists(atPath: url.path) else { continue }
             let users = assetIndex.notes(referencing: path)
             do {
