@@ -122,6 +122,11 @@ enum DebugHooks {
             if let store, let note = query["note"], let name = query["name"] { store.renameNote(note, to: name) }
         case "ui/trash":
             if let store, let path = query["note"] { store.trashNote(path) }
+        case "ui/remove-deleted":
+            // `path=` removes one entry from Recently Deleted, `all=1` empties it (as the confirmed menu action does).
+            guard let store else { return }
+            let files = query["all"] == "1" ? store.deletedFiles : store.deletedFiles.filter { $0.path == query["path"] }
+            store.removeFromRecentlyDeleted(files)
         case "ui/restore-deleted":
             guard let store, let path = query["path"] else { return }
             Task {
@@ -300,6 +305,7 @@ enum DebugHooks {
             lines.append("sidebar: \(String(describing: store.sidebarSelection))")
             lines.append("search: \(store.searchText)")
             lines.append("visible: \(store.visibleNotes.map(\.id))")
+            lines.append("deleted: \(store.deletedFiles.map(\.path))")
             lines.append("selected: \(store.selectedNoteID ?? "-")")
             lines.append("sheet: \(store.sheet?.id ?? "-")")
             lines.append("git: \(store.gitState)")

@@ -1054,11 +1054,21 @@ enum GitState: Equatable {
 
     func loadDeletedFiles() async {
         guard let git else { return }
-        let notesExtensions = NoteMDCore.noteExtensions
         let files = (try? await git.deletedFiles(limit: 200)) ?? []
-        deletedFiles = files.filter { file in
-            notesExtensions.contains((file.path as NSString).pathExtension.lowercased()) && notesByPath[file.path] == nil
-        }
+        deletedFiles = RecentlyDeleted.visible(files, cleared: clearedDeletions, existingPaths: Set(notesByPath.keys))
+    }
+
+    /// Hides deletions from Recently Deleted for good (on this Mac). The files stay in git history.
+    func removeFromRecentlyDeleted(_ files: [GitDeletedFile]) {
+        clearedDeletions.formUnion(files.map(RecentlyDeleted.key))
+        let paths = Set(files.map(\.path))
+        deletedFiles.removeAll { paths.contains($0.path) }
+        if let selected = selectedDeletedPath, paths.contains(selected) { selectedDeletedPath = nil }
+    }
+
+    private var clearedDeletions: Set<String> {
+        get { Set(UserDefaults.standard.stringArray(forKey: "clearedDeletions:" + rootURL.path) ?? []) }
+        set { UserDefaults.standard.set(newValue.sorted(), forKey: "clearedDeletions:" + rootURL.path) }
     }
 
     func restoreDeleted(_ file: GitDeletedFile) async {

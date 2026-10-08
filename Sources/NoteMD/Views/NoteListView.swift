@@ -12,16 +12,26 @@ struct NoteListView: View {
                 DeletedNotesList()
             } else if store.visibleNotes.isEmpty && store.isLoaded {
                 emptyState
+                    .frame(maxWidth: .infinity, maxHeight: .infinity)
+                    .contentShape(Rectangle())
+                    .contextMenu { NoteListBackgroundMenu(createTemplate: createTemplate) }
             } else {
                 List(selection: $store.selectedNoteID) {
                     ForEach(store.visibleNotes) { row in
                         NoteRowView(row: row, showsFolder: showsFolders)
                             .tag(row.id)
                             .draggable(SidebarDrop.notePayload(row.id))
-                            .contextMenu { NoteContextMenu(path: row.id) }
                     }
                 }
                 .listStyle(.inset)
+                // An empty selection means the click was on empty space.
+                .contextMenu(forSelectionType: String.self) { paths in
+                    if let path = paths.first {
+                        NoteContextMenu(path: path)
+                    } else {
+                        NoteListBackgroundMenu(createTemplate: createTemplate)
+                    }
+                }
                 .onDeleteCommand {
                     if let path = store.selectedNoteID { store.trashNote(path) }
                 }
@@ -92,6 +102,62 @@ struct NoteListView: View {
             ])
         }
         store.sheet = .templateParameters(path: path)
+    }
+}
+
+/// The menu for empty space in the note list: the actions of the current sidebar view.
+struct NoteListBackgroundMenu: View {
+    @Environment(RepositoryStore.self) private var store
+    private let settings = AppSettings.shared
+    var createTemplate: () -> Void
+
+    var body: some View {
+        switch store.sidebarSelection {
+        case .folder(let path):
+            Button("New Note") { store.createNote(in: path) }
+            Button("New Folder Inside…") { store.beginCreateFolder(in: path) }
+            Divider()
+            Button("Edit Folder…") { store.beginEditFolder(path) }
+            Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([store.url(forFolder: path)]) }
+            Divider()
+            sortPicker
+            Toggle("Include Subfolders", isOn: Bindable(settings).includeSubfolders)
+        case .tag:
+            Button("New Note") { store.createNote() }  // tagged with the selected tag
+            Divider()
+            sortPicker
+        case .templates:
+            Button("New Template") { createTemplate() }
+            Divider()
+            sortPicker
+        case .recentlyDeleted:
+            EmptyView()
+        case .allNotes, .none:
+            Button("New Note") { store.createNote() }
+            templatesMenu
+            Divider()
+            sortPicker
+        }
+    }
+
+    private var sortPicker: some View {
+        Picker("Sort By", selection: Bindable(settings).sortOrder) {
+            ForEach(NoteSortOrder.allCases) { Text($0.title).tag($0) }
+        }
+    }
+
+    private var templatesMenu: some View {
+        let templates = store.notes.filter(\.isTemplate).sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
+        return Menu("New Note from Template") {
+            ForEach(templates) { note in
+                // Opens the fill form, whose Save as Note… creates the note.
+                Button(note.title.contains("{{") ? (note.path as NSString).lastPathComponent : note.title) {
+                    store.selectedNoteID = note.id
+                    store.sheet = .templateForm(path: note.id)
+                }
+            }
+        }
+        .disabled(templates.isEmpty)
     }
 }
 
@@ -175,6 +241,7 @@ struct NoteContextMenu: View {
 
 private struct DeletedNotesList: View {
     @Environment(RepositoryStore.self) private var store
+    @State private var confirmEmpty = false
 
     var body: some View {
         @Bindable var store = store
@@ -192,12 +259,23 @@ private struct DeletedNotesList: View {
                     }
                     .padding(.vertical, 4)
                     .tag(file.path)
-                    .contextMenu {
-                        Button("Restore") { Task { await store.restoreDeleted(file) } }
-                    }
                 }
             }
             .listStyle(.inset)
+            .contextMenu(forSelectionType: String.self) { paths in
+                let files = store.deletedFiles.filter { paths.contains($0.path) }
+                if files.isEmpty {
+                    Button("Empty Recently Deleted…") { confirmEmpty = true }
+                } else {
+                    Button("Restore") { Task { for file in files { await store.restoreDeleted(file) } } }
+                    Button("Remove from List") { store.removeFromRecentlyDeleted(files) }
+                }
+            }
+            .confirmationDialog("Empty Recently Deleted?", isPresented: $confirmEmpty) {
+                Button("Empty Recently Deleted", role: .destructive) { store.removeFromRecentlyDeleted(store.deletedFiles) }
+            } message: {
+                Text("This only clears the list. The notes stay in the repository's git history, so they can still be recovered with git.")
+            }
         }
     }
 }

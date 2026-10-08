@@ -267,7 +267,9 @@ note paths must be plain repository-relative paths.
 - `ui/sidebar?item=all|templates|deleted` or `folder=`/`tag=`, `ui/select?note=`, `ui/search?q=`, `ui/mode?value=edit|split|preview`
 - `ui/new-note?title=&body=`, `ui/type?text=`, `ui/tags?value=a,b`, `ui/folder-style?path=&icon=&color=`
 - `ui/sheet?name=history|form|params|rename|folder-new|folder-edit&path=`, `ui/close-sheet`
-- `ui/move?note=&folder=`, `ui/move-folder?path=&parent=`, `ui/rename?note=&name=`, `ui/trash?note=`, `ui/restore-deleted?path=`
+- `ui/move?note=&folder=`, `ui/move-folder?path=&parent=`, `ui/rename?note=&name=`, `ui/trash?note=`, `ui/restore-deleted?path=`,
+  `ui/remove-deleted?path=|all=1` (hides Recently Deleted entries). The background Test build can commit a minute late:
+  wait for `git log` before relying on history
 - `ui/editor-command?name=tab|backtab|newline|text&text=&select=end|all[&target=document]`, `ui/settings`
 - `ui/sheet-key?index=&text=&key=return|cmd-return` (types into the index-th multi-line box of the open sheet, then
   routes the key like AppKit: default buttons first). Avoid it in the Use Template form, where a stray Return copies.
