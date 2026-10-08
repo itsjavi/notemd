@@ -265,9 +265,8 @@ private struct NoteToolbar: ToolbarContent {
                 if editor.isTemplate {
                     Button("Use Template…") { store.sheet = .templateForm(path: editor.path) }
                     Button("Edit Parameters…") { store.sheet = .templateParameters(path: editor.path) }
-                } else {
-                    Button("Make Template…") { store.sheet = .templateParameters(path: editor.path) }
                 }
+                TemplateConversionButtons(path: editor.path)
                 Divider()
                 Button("Rename…") { store.sheet = .renameNote(path: editor.path) }
                 Button("Duplicate") { store.duplicateNote(editor.path) }

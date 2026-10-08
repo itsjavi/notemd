@@ -129,6 +129,15 @@ enum DebugHooks {
             if let store, let note = query["note"], let name = query["name"] { store.renameNote(note, to: name) }
         case "ui/trash":
             if let store, let path = query["note"] { store.trashNote(path) }
+        case "ui/convert":
+            // `to=template|note`, `copy=1` for a converted copy; `confirm=1` goes through Convert to Note's confirmation.
+            guard let store, let path = query["note"] else { return }
+            let toTemplate = query["to"] == "template"
+            if !toTemplate && query["copy"] != "1" && query["confirm"] == "1" {
+                store.requestConvertToNote(path)
+            } else {
+                store.convertNote(path, toTemplate: toTemplate, copy: query["copy"] == "1")
+            }
         case "ui/delete-incognito":
             // As confirmed in the dialog `ui/trash` shows for incognito notes.
             if let store, let path = query["note"] { store.deleteIncognitoNote(path) }
@@ -448,6 +457,7 @@ enum DebugHooks {
             lines.append("visible: \(store.visibleNotes.map(\.id))")
             lines.append("deleted: \(store.deletedFiles.map(\.path))")
             lines.append("incognito: \(store.incognitoNotes.map(\.path).sorted()) pendingDelete: \(store.incognitoNotePendingDelete ?? "-")")
+            lines.append("templates: \(store.notes.filter(\.isTemplate).map(\.path).sorted()) pendingConversion: \(store.templatePendingConversion ?? "-")")
             lines.append("assets: \(store.assetRows(.all).map { "\($0.path)=\($0.isMissing ? "missing" : String($0.notes.count))" })")
             lines.append("assetFilter: \(store.assetFilter.rawValue) selectedAsset: \(store.selectedAssetPath ?? "-")")
             if let path = store.selectedNoteID {

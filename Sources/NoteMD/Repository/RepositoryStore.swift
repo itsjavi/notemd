@@ -132,6 +132,8 @@ enum GitState: Equatable {
     var showsVoiceRecorder = false
     /// The syntax guide popover of the Template Parameters sheet.
     var showsTemplateGuide = false
+    /// A template waiting for the Convert to Note confirmation, since it would lose its parameters.
+    var templatePendingConversion: String?
 
     // MARK: Assets state (see RepositoryStore+Assets.swift)
 
@@ -155,7 +157,7 @@ enum GitState: Equatable {
     @ObservationIgnored private var watcher: FileWatcher?
     @ObservationIgnored private(set) var git: GitClient?
     @ObservationIgnored private var gitExecutable: URL?
-    @ObservationIgnored private var autoCommitter: AutoCommitter?
+    @ObservationIgnored private(set) var autoCommitter: AutoCommitter?
     @ObservationIgnored private var isScanning = false
     @ObservationIgnored private var needsRescan = false
     @ObservationIgnored private var commitDelayObservation = false
@@ -443,7 +445,7 @@ enum GitState: Equatable {
         selectedNoteID = path
     }
 
-    private func scanSingle(_ path: String) -> Note? {
+    func scanSingle(_ path: String) -> Note? {
         let url = fileURL(for: path)
         guard let text = RepositoryScanner.readText(url) else { return nil }
         let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .creationDateKey, .fileSizeKey])

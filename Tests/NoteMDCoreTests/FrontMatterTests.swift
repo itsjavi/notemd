@@ -76,6 +76,66 @@ import Testing
         #expect(frontMatter.yaml == "title: Prompt\n")
         #expect(!frontMatter.isTemplate)
     }
+
+    @Test func convertingNoteToTemplateKeepsOtherEntriesAndBody() {
+        var text = MarkdownText("---\ntitle: X\n# keep me\ntags: [a]\nvendors: [claude, codex]   # inline\n---\n# Body\n")
+        text.setTemplate(true)
+        #expect(text.text == "---\ntitle: X\n# keep me\ntags: [a]\nvendors: [claude, codex]   # inline\ntemplate: true\n---\n# Body\n")
+        #expect(text.frontMatter?.isTemplate == true)
+        #expect(text.frontMatter?.tags == ["a"])
+    }
+
+    @Test func convertingNoteWithoutFrontMatterAddsIt() {
+        var text = MarkdownText("# Hi\n\nBody")
+        text.setTemplate(true)
+        #expect(text.text == "---\ntemplate: true\n---\n# Hi\n\nBody")
+        #expect(MarkdownText(text.text).frontMatter?.isTemplate == true)
+    }
+
+    @Test func convertingReplacesAnExistingTemplateValue() {
+        var text = MarkdownText("---\ntemplate: false\ntags: [a]\n---\nB")
+        text.setTemplate(true)
+        #expect(text.text == "---\ntemplate: true\ntags: [a]\n---\nB")
+    }
+
+    @Test func convertingTemplateToNoteRemovesTemplateAndParameters() {
+        var text = MarkdownText("---\ntitle: P\ntemplate: true\nparams:\n- name: topic\n  type: text\n\n# keep me\nvendors: [a, b]   # inline\n---\nWrite about {{topic}}\n")
+        text.setTemplate(false)
+        #expect(text.text == "---\ntitle: P\n# keep me\nvendors: [a, b]   # inline\n---\nWrite about {{topic}}\n")
+        #expect(text.frontMatter?.isTemplate == false)
+        #expect(text.frontMatter?.keys == ["title", "vendors"])
+    }
+
+    @Test func convertingTemplateToNoteDropsEmptiedFrontMatter() {
+        var flagged = MarkdownText("---\ntemplate: true\n---\nBody")
+        flagged.setTemplate(false)
+        #expect(flagged.text == "Body")
+        #expect(flagged.frontMatter == nil)
+
+        var aliased = MarkdownText("---\nparameters:\n- name: x\n---\nBody")
+        #expect(aliased.frontMatter?.isTemplate == true)
+        aliased.setTemplate(false)
+        #expect(aliased.text == "Body")
+    }
+
+    @Test func removingAnEntryKeepsTheCommentsAfterIt() {
+        var frontMatter = FrontMatter(yaml: "# about tags\ntags: [a]\n\n# about vendors\nvendors: [x]\n")
+        frontMatter.setTags([])
+        #expect(frontMatter.yaml == "# about tags\n# about vendors\nvendors: [x]\n")
+        var first = FrontMatter(yaml: "template: true\n# about title\ntitle: T\n")
+        first.setTemplate(false)
+        #expect(first.yaml == "# about title\ntitle: T\n")
+        #expect(first.title == "T")
+    }
+
+    @Test func convertingBackAndForthRoundTrips() {
+        let source = "---\r\ntitle: X\r\n---\r\nBody"
+        var text = MarkdownText(source)
+        text.setTemplate(true)
+        #expect(text.text == "---\r\ntitle: X\r\ntemplate: true\r\n---\r\nBody")
+        text.setTemplate(false)
+        #expect(text.text == source)
+    }
 }
 
 @Suite struct TemplateParameterTests {

@@ -32,6 +32,14 @@ public struct MarkdownText: Sendable, Equatable {
         lhs.text == rhs.text
     }
 
+    /// Converts the note to a template or back (see `FrontMatter.setTemplate`); the body is unchanged and
+    /// front matter left empty is dropped.
+    public mutating func setTemplate(_ isTemplate: Bool) {
+        var frontMatter = self.frontMatter ?? FrontMatter()
+        frontMatter.setTemplate(isTemplate)
+        self.frontMatter = frontMatter.isEmpty ? nil : frontMatter
+    }
+
     /// The full text, front matter included.
     public var text: String {
         guard let frontMatter else { return body }
@@ -127,6 +135,17 @@ public struct FrontMatter: Sendable, Equatable {
         setEntry("params", raw: parameters.isEmpty ? nil : TemplateParameter.yaml(for: parameters))
     }
 
+    /// Makes the note a template (`template: true`) or a plain note (no `template` key or parameters).
+    /// Other entries keep their raw text.
+    public mutating func setTemplate(_ isTemplate: Bool) {
+        if isTemplate {
+            setEntry("template", raw: "template: true\n")
+        } else {
+            setEntry("template", raw: nil)
+            setParameters([])
+        }
+    }
+
     /// Replaces (or appends, or removes when `raw` is nil) a top-level entry and re-parses.
     mutating func setEntry(_ key: String, raw newRaw: String?) {
         // Match the file's line endings so edits don't mix CRLF and LF.
@@ -135,7 +154,15 @@ public struct FrontMatter: Sendable, Equatable {
             if let raw {
                 entries[index].raw = Self.keepingTrailingTrivia(of: entries[index].raw, replacement: raw)
             } else {
+                // Comments after the removed value usually describe the next key: keep them where they were.
+                let trivia = Self.keepingTrailingTrivia(of: entries[index].raw, replacement: "")
+                    .split(separator: "\n", omittingEmptySubsequences: false)
+                    .drop { $0.trimmingCharacters(in: .whitespacesAndNewlines).isEmpty }
+                    .joined(separator: yaml.contains("\r\n") ? "\r\n" : "\n")
                 entries.remove(at: index)
+                if !trivia.isEmpty {
+                    if index > 0 { entries[index - 1].raw += trivia } else { entries.insert(Entry(key: nil, raw: trivia), at: 0) }
+                }
             }
         } else if let raw {
             if let last = entries.indices.last, !(entries[last].raw as NSString).hasSuffix("\n") {

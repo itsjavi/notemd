@@ -82,10 +82,21 @@ struct NoteMDCommands: Commands {
             }
             .keyboardShortcut(.return, modifiers: .command)
             .disabled(store?.editor?.isTemplate != true)
-            Button(store?.editor?.isTemplate == true ? "Edit Template Parameters…" : "Make Template…") {
+            Button("Edit Template Parameters…") {
                 if let store, let path = store.editor?.path { store.sheet = .templateParameters(path: path) }
             }
             .keyboardShortcut("p", modifiers: [.command, .option])
+            .disabled(store?.editor?.isTemplate != true)
+            Divider()
+            Button(store?.editor?.isTemplate == true ? "Convert to Note…" : "Convert to Template") {
+                guard let store, let editor = store.editor else { return }
+                if editor.isTemplate { store.requestConvertToNote(editor.path) } else { store.convertNote(editor.path, toTemplate: true, copy: false) }
+            }
+            .disabled(store?.editor == nil)
+            Button(store?.editor?.isTemplate == true ? "Duplicate as Note" : "Duplicate as Template") {
+                guard let store, let editor = store.editor else { return }
+                store.convertNote(editor.path, toTemplate: !editor.isTemplate, copy: true)
+            }
             .disabled(store?.editor == nil)
             Divider()
             Button("Version History…") {

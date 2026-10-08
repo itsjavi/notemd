@@ -44,6 +44,22 @@ struct NoteListView: View {
         } message: {
             Text("Incognito notes aren't versioned or moved to the Bin. This can't be undone.")
         }
+        .confirmationDialog(
+            "Convert “\(store.templatePendingConversion.flatMap { store.note(at: $0)?.title } ?? "")” to a note?",
+            isPresented: Binding(get: { store.templatePendingConversion != nil }, set: { if !$0 { store.templatePendingConversion = nil } })
+        ) {
+            Button("Convert to Note") {
+                if let path = store.templatePendingConversion { store.convertNote(path, toTemplate: false, copy: false) }
+                store.templatePendingConversion = nil
+            }
+            Button("Duplicate as Note") {
+                if let path = store.templatePendingConversion { store.convertNote(path, toTemplate: false, copy: true) }
+                store.templatePendingConversion = nil
+            }
+        } message: {
+            let keepsHistory = store.isVersioned && !RepositoryLayout.isIncognitoPath(store.templatePendingConversion ?? "")
+            Text("Its parameters are removed from the front matter. " + (keepsHistory ? "Version History keeps the template version." : "Duplicate as Note keeps the template as it is."))
+        }
         .navigationTitle(store.selectionTitle)
         .toolbar {
             ToolbarItemGroup {
@@ -83,7 +99,7 @@ struct NoteListView: View {
             ContentUnavailableView {
                 Label("No Templates", systemImage: "wand.and.stars")
             } description: {
-                Text("Turn any note into a template from its ⋯ menu, then add parameters like `{{topic}}` to fill in later.")
+                Text("Convert any note to a template from its ⋯ or right-click menu, then add parameters like `{{topic}}` to fill in later.")
             } actions: {
                 Button("New Template") { store.createTemplate() }
             }
@@ -262,6 +278,7 @@ struct NoteContextMenu: View {
         let isIncognito = RepositoryLayout.isIncognitoPath(path)
         Button("Rename…") { store.sheet = .renameNote(path: path) }
         Button("Duplicate") { store.duplicateNote(path) }
+        TemplateConversionButtons(path: path)
         // Moving an incognito note into the notes keeps it (versioned from then on).
         Menu(isIncognito ? "Keep In" : "Move To") {
             Button("Notes (top level)") { store.moveNote(path, toFolder: "") }
@@ -280,6 +297,22 @@ struct NoteContextMenu: View {
         }
         Divider()
         Button(isIncognito ? "Delete…" : "Move to Trash", role: .destructive) { store.trashNote(path) }
+    }
+}
+
+/// Convert to Template / Duplicate as Template for notes, Convert to Note… / Duplicate as Note for templates.
+struct TemplateConversionButtons: View {
+    @Environment(RepositoryStore.self) private var store
+    let path: String
+
+    var body: some View {
+        if store.note(at: path)?.isTemplate == true {
+            Button("Convert to Note…") { store.requestConvertToNote(path) }
+            Button("Duplicate as Note") { store.convertNote(path, toTemplate: false, copy: true) }
+        } else {
+            Button("Convert to Template") { store.convertNote(path, toTemplate: true, copy: false) }
+            Button("Duplicate as Template") { store.convertNote(path, toTemplate: true, copy: true) }
+        }
     }
 }
 

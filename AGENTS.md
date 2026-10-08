@@ -270,6 +270,7 @@ for incognito notes. `debug/state` reports the `layout:` (`files` or `root`) and
 - `ui/new-note?title=&body=[&incognito=1]`, `ui/delete-incognito?note=` (as confirmed; `ui/trash` only asks),
   `ui/close-repo` (closes the window, discarding its incognito notes), `ui/type?text=`, `ui/tags?value=a,b`, `ui/folder-style?path=&icon=&color=`
 - `ui/sheet?name=history|form|params|rename|folder-new|folder-edit&path=`, `ui/close-sheet`
+- `ui/convert?note=&to=template|note[&copy=1][&confirm=1]` (`confirm=1` shows Convert to Note's confirmation)
 - `ui/move?note=&folder=`, `ui/move-folder?path=&parent=`, `ui/rename?note=&name=`, `ui/trash?note=`, `ui/restore-deleted?path=`,
   `ui/remove-deleted?path=|all=1` (hides Recently Deleted entries)
 - `ui/sidebar?item=assets`, `ui/asset-filter?value=all|unused|missing`, `ui/asset-select?path=`, `ui/attachments?note=`

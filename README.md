@@ -48,6 +48,7 @@ And while I was at it, a proper editor for every other text file on my Mac. Good
 - **Templates for reusable prompts.** Add `params` to a note's front matter and use `{{name}}` placeholders, plus
   `{{#if}}`, `{{#elseif}}`, `{{#unless}}` and `{{#each}}` blocks. Conditions can compare values
   (`{{#if language == Swift}}`, `{{#if max >= 10}}`), and the parameters editor has a syntax guide one click away.
+  Convert any note to a template and back, in place or as a copy.
   _Use Template_ opens a form (text, long text, number, toggle, choice, multiple choice, file, folder, date and list
   fields) and gives you the result to copy or save as a note. To have an AI agent write templates for you, point it
   at the [create-reusable-prompt](skills/create-reusable-prompt/SKILL.md) skill and its front matter JSON Schema.

@@ -71,6 +71,10 @@ import Observation
         updateFrontMatter { $0.setParameters(parameters) }
     }
 
+    func setTemplate(_ isTemplate: Bool) {
+        updateFrontMatter { $0.setTemplate(isTemplate) }
+    }
+
     private func updateFrontMatter(_ change: (inout FrontMatter) -> Void) {
         var frontMatter = markdown.frontMatter ?? FrontMatter()
         change(&frontMatter)
