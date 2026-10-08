@@ -14,7 +14,7 @@ struct NoteListView: View {
                 emptyState
                     .frame(maxWidth: .infinity, maxHeight: .infinity)
                     .contentShape(Rectangle())
-                    .contextMenu { NoteListBackgroundMenu(createTemplate: createTemplate) }
+                    .contextMenu { NoteListBackgroundMenu() }
             } else {
                 List(selection: $store.selectedNoteID) {
                     ForEach(store.visibleNotes) { row in
@@ -24,14 +24,10 @@ struct NoteListView: View {
                     }
                 }
                 .listStyle(.inset)
-                // An empty selection means the click was on empty space.
                 .contextMenu(forSelectionType: String.self) { paths in
-                    if let path = paths.first {
-                        NoteContextMenu(path: path)
-                    } else {
-                        NoteListBackgroundMenu(createTemplate: createTemplate)
-                    }
+                    if let path = paths.first { NoteContextMenu(path: path) }
                 }
+                .listBackgroundContextMenu { NoteListBackgroundMenu().environment(store) }
                 .onDeleteCommand {
                     if let path = store.selectedNoteID { store.trashNote(path) }
                 }
@@ -89,7 +85,7 @@ struct NoteListView: View {
             } description: {
                 Text("Turn any note into a template from its ⋯ menu, then add parameters like `{{topic}}` to fill in later.")
             } actions: {
-                Button("New Template") { createTemplate() }
+                Button("New Template") { store.createTemplate() }
             }
         } else if store.sidebarSelection == .incognito {
             ContentUnavailableView {
@@ -110,25 +106,12 @@ struct NoteListView: View {
             }
         }
     }
-
-    private func createTemplate() {
-        let body = "# New Template\n\nWrite about **{{topic}}** in a {{tone}} tone.\n"
-        guard let path = store.createNote(title: "New Template", body: body) else { return }
-        if let editor = store.editor, editor.path == path {
-            editor.setParameters([
-                TemplateParameter(name: "topic", type: .text, required: true, placeholder: "What should it be about?"),
-                TemplateParameter(name: "tone", type: .choice, defaultValue: .text("friendly"), options: ["friendly", "formal", "playful"]),
-            ])
-        }
-        store.sheet = .templateParameters(path: path)
-    }
 }
 
 /// The menu for empty space in the note list: the actions of the current sidebar view.
 struct NoteListBackgroundMenu: View {
     @Environment(RepositoryStore.self) private var store
     private let settings = AppSettings.shared
-    var createTemplate: () -> Void
 
     var body: some View {
         switch store.sidebarSelection {
@@ -146,7 +129,7 @@ struct NoteListBackgroundMenu: View {
             Divider()
             sortPicker
         case .templates:
-            Button("New Template") { createTemplate() }
+            Button("New Template") { store.createTemplate() }
             Divider()
             sortPicker
         case .incognito:
@@ -157,7 +140,7 @@ struct NoteListBackgroundMenu: View {
             EmptyView()
         case .allNotes, .none:
             Button("New Note") { store.createNote() }
-            templatesMenu
+            NewNoteFromTemplateMenu()
             Divider()
             sortPicker
         }
@@ -168,12 +151,16 @@ struct NoteListBackgroundMenu: View {
             ForEach(NoteSortOrder.allCases) { Text($0.title).tag($0) }
         }
     }
+}
 
-    private var templatesMenu: some View {
-        let templates = store.notes.filter(\.isTemplate).sorted { $0.title.localizedStandardCompare($1.title) == .orderedAscending }
-        return Menu("New Note from Template") {
+/// Lists the templates; each opens its fill form, whose Save as Note… creates the note.
+struct NewNoteFromTemplateMenu: View {
+    @Environment(RepositoryStore.self) private var store
+
+    var body: some View {
+        let templates = store.templatesByTitle
+        Menu("New Note from Template") {
             ForEach(templates) { note in
-                // Opens the fill form, whose Save as Note… creates the note.
                 Button(note.title.contains("{{") ? (note.path as NSString).lastPathComponent : note.title) {
                     store.selectedNoteID = note.id
                     store.sheet = .templateForm(path: note.id)
@@ -321,12 +308,13 @@ private struct DeletedNotesList: View {
             .listStyle(.inset)
             .contextMenu(forSelectionType: String.self) { paths in
                 let files = store.deletedFiles.filter { paths.contains($0.path) }
-                if files.isEmpty {
-                    Button("Empty Recently Deleted…") { confirmEmpty = true }
-                } else {
+                if !files.isEmpty {
                     Button("Restore") { Task { for file in files { await store.restoreDeleted(file) } } }
                     Button("Remove from List") { store.removeFromRecentlyDeleted(files) }
                 }
+            }
+            .listBackgroundContextMenu {
+                Button("Empty Recently Deleted…") { confirmEmpty = true }
             }
             .confirmationDialog("Empty Recently Deleted?", isPresented: $confirmEmpty) {
                 Button("Empty Recently Deleted", role: .destructive) { store.removeFromRecentlyDeleted(store.deletedFiles) }

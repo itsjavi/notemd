@@ -1268,6 +1268,12 @@ enum GitState: Equatable {
         deletedFiles = RecentlyDeleted.visible(files, cleared: clearedDeletions, existingPaths: existing, includingAssets: true)
     }
 
+    /// Hides every listed deletion, loading the list first when Recently Deleted hasn't been opened yet.
+    func emptyRecentlyDeleted() async {
+        await loadDeletedFiles()
+        removeFromRecentlyDeleted(deletedFiles)
+    }
+
     /// Hides deletions from Recently Deleted for good (on this Mac). The files stay in git history.
     func removeFromRecentlyDeleted(_ files: [GitDeletedFile]) {
         clearedDeletions.formUnion(files.map(RecentlyDeleted.key))

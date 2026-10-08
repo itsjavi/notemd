@@ -156,8 +156,11 @@ enum DebugHooks {
         case "ui/remove-deleted":
             // `path=` removes one entry from Recently Deleted, `all=1` empties it (as the confirmed menu action does).
             guard let store else { return }
-            let files = query["all"] == "1" ? store.deletedFiles : store.deletedFiles.filter { $0.path == query["path"] }
-            store.removeFromRecentlyDeleted(files)
+            if query["all"] == "1" {
+                Task { await store.emptyRecentlyDeleted() }
+            } else {
+                store.removeFromRecentlyDeleted(store.deletedFiles.filter { $0.path == query["path"] })
+            }
         case "ui/restore-deleted":
             guard let store, let path = query["path"] else { return }
             Task {

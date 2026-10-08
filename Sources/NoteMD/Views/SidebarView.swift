@@ -3,6 +3,7 @@ import SwiftUI
 
 struct SidebarView: View {
     @Environment(RepositoryStore.self) private var store
+    @State private var confirmEmptyDeleted = false
 
     var body: some View {
         @Bindable var store = store
@@ -13,13 +14,23 @@ struct SidebarView: View {
                         .badge(store.notes.count)
                         .tag(SidebarItem.allNotes)
                         .dropDestination(for: String.self) { items, _ in _ = drop(items, into: "") }
+                        .contextMenu {
+                            Button("New Note") { store.sidebarSelection = .allNotes; store.createNote() }
+                            NewNoteFromTemplateMenu()
+                        }
                     Label("Templates", systemImage: "wand.and.stars")
                         .badge(store.notes.filter(\.isTemplate).count)
                         .tag(SidebarItem.templates)
+                        .contextMenu {
+                            Button("New Template") { store.createTemplate() }
+                        }
                     Label("Incognito", systemImage: "eye.slash")
                         .badge(store.incognitoNotes.count)
                         .tag(SidebarItem.incognito)
                         .help("Notes that are never versioned and are deleted when this window closes")
+                        .contextMenu {
+                            Button("New Incognito Note") { store.createIncognitoNote() }
+                        }
                     if !store.assetFiles.isEmpty || !store.assetIndex.referencedPaths.isEmpty {
                         Label("Assets", systemImage: "paperclip")
                             .badge(store.assetFiles.count)
@@ -28,6 +39,9 @@ struct SidebarView: View {
                     if store.isVersioned {
                         Label("Recently Deleted", systemImage: "trash")
                             .tag(SidebarItem.recentlyDeleted)
+                            .contextMenu {
+                                Button("Empty Recently Deleted…") { confirmEmptyDeleted = true }
+                            }
                     }
                 }
 
@@ -56,11 +70,20 @@ struct SidebarView: View {
                             Label(tag.tag, systemImage: "number")
                                 .badge(tag.count)
                                 .tag(SidebarItem.tag(tag.tag))
+                                .contextMenu {
+                                    // In the tag's view, new notes get the tag (and stay visible).
+                                    Button("New Note Tagged #\(tag.tag)") { store.sidebarSelection = .tag(tag.tag); store.createNote() }
+                                }
                         }
                     }
                 }
             }
             .listStyle(.sidebar)
+            .confirmationDialog("Empty Recently Deleted?", isPresented: $confirmEmptyDeleted) {
+                Button("Empty Recently Deleted", role: .destructive) { Task { await store.emptyRecentlyDeleted() } }
+            } message: {
+                Text("This only clears the list. The notes stay in the repository's git history, so they can still be recovered with git.")
+            }
 
             SidebarFooter()
         }
