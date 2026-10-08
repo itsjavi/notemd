@@ -3,7 +3,8 @@ import Foundation
 /// Renders template bodies with a small Mustache/Handlebars-like syntax:
 ///
 /// - `{{name}}` inserts a value (lists join with ", "; dates use the parameter format)
-/// - `{{#if name}}…{{else}}…{{/if}}` and `{{#unless name}}…{{/unless}}` test truthiness
+/// - `{{#if name}}…{{#elseif other}}…{{else}}…{{/if}}` and `{{#unless name}}…{{/unless}}` test truthiness,
+///   or compare with a literal: `{{#if status == "done"}}`, `!=`, and for numbers `<`, `<=`, `>`, `>=`
 /// - `{{#each name}}…{{.}}…{{/each}}` repeats for list items (`{{@index}}` is 1-based)
 /// - `{{@today}}`, `{{@now}}` insert the current date / date-time
 ///
@@ -37,13 +38,16 @@ public struct TemplateRenderer: Sendable {
     /// Placeholder names referenced in a template (excluding built-ins and `.`).
     public static func referencedNames(in template: String) -> Set<String> {
         var names = Set<String>()
+        func add(_ name: String) {
+            if !name.hasPrefix("@") && name != "." && name != "this" { names.insert(name) }
+        }
         func walk(_ nodes: [Node]) {
             for node in nodes {
                 switch node {
                 case .text: break
-                case .variable(let name, _): if !name.hasPrefix("@") && name != "." { names.insert(name) }
-                case .block(_, let name, let body, let elseBody):
-                    names.insert(name)
+                case .variable(let name, _): add(name)
+                case .block(_, let condition, let body, let elseBody):
+                    add(condition.name)
                     walk(body)
                     walk(elseBody)
                 }
@@ -59,11 +63,43 @@ public struct TemplateRenderer: Sendable {
         case text(String)
         /// name and the original tag text (re-emitted when the name is unknown)
         case variable(String, String)
-        case block(kind: String, name: String, body: [Node], elseBody: [Node])
+        case block(kind: String, condition: Condition, body: [Node], elseBody: [Node])
+    }
+
+    /// A block's test: a value's truthiness, or a comparison with a literal (`status == "done"`, `max >= 10`).
+    struct Condition: Equatable {
+        enum Comparison: String { case equal = "==", notEqual = "!=", less = "<", lessOrEqual = "<=", greater = ">", greaterOrEqual = ">=" }
+
+        var name: String
+        var comparison: Comparison?
+        /// The literal compared against, without its quotes.
+        var operand = ""
+
+        private static let pattern = try! NSRegularExpression(pattern: #"^(\S+?)\s*(==|!=|<=|>=|<|>)\s*(.+)$"#)
+
+        init(name: String) {
+            self.name = name
+        }
+
+        init(parsing expression: String) {
+            let ns = expression as NSString
+            guard let match = Self.pattern.firstMatch(in: expression, range: NSRange(location: 0, length: ns.length)) else {
+                self.init(name: expression)
+                return
+            }
+            self.init(name: ns.substring(with: match.range(at: 1)))
+            comparison = Comparison(rawValue: ns.substring(with: match.range(at: 2)))
+            operand = Self.unquoted(ns.substring(with: match.range(at: 3)))
+        }
+
+        private static func unquoted(_ literal: String) -> String {
+            guard literal.count >= 2, let first = literal.first, first == "\"" || first == "'", literal.last == first else { return literal }
+            return String(literal.dropFirst().dropLast())
+        }
     }
 
     private struct Token {
-        enum Kind { case text, variable, open, close, elseTag }
+        enum Kind { case text, variable, open, close, elseTag, elseIf }
         var kind: Kind
         var name: String
         var raw: String
@@ -94,6 +130,8 @@ public struct TemplateRenderer: Sendable {
                 let parts = content.split(separator: " ", maxSplits: 1).map(String.init)
                 if parts.count == 2, ["if", "unless", "each"].contains(parts[0]) {
                     tokens.append(Token(kind: .open, name: parts[1].trimmingCharacters(in: .whitespaces), raw: raw, blockKind: parts[0]))
+                } else if parts.count == 2, parts[0] == "elseif" {
+                    tokens.append(Token(kind: .elseIf, name: parts[1].trimmingCharacters(in: .whitespaces), raw: raw))
                 } else {
                     tokens.append(Token(kind: .text, name: "", raw: raw))
                 }
@@ -106,6 +144,9 @@ public struct TemplateRenderer: Sendable {
             default:
                 if content == "else" {
                     tokens.append(Token(kind: .elseTag, name: "", raw: raw))
+                } else if content.hasPrefix("else if ") {
+                    // Handlebars spelling of `{{#elseif …}}`.
+                    tokens.append(Token(kind: .elseIf, name: content.dropFirst(8).trimmingCharacters(in: .whitespaces), raw: raw))
                 } else if !content.isEmpty {
                     tokens.append(Token(kind: .variable, name: content, raw: raw))
                 } else {
@@ -123,7 +164,7 @@ public struct TemplateRenderer: Sendable {
     /// Removes the line of a block tag that stands alone on it (only whitespace around it).
     private static func stripStandaloneLines(_ input: [Token]) -> [Token] {
         var tokens = input
-        for i in tokens.indices where [.open, .close, .elseTag].contains(tokens[i].kind) {
+        for i in tokens.indices where [.open, .close, .elseTag, .elseIf].contains(tokens[i].kind) {
             let before = i > 0 && tokens[i - 1].kind == .text ? tokens[i - 1].raw : (i == 0 ? "" : nil)
             let after = i + 1 < tokens.count && tokens[i + 1].kind == .text ? tokens[i + 1].raw : (i + 1 == tokens.count ? "" : nil)
             guard let before, let after else { continue }
@@ -168,11 +209,21 @@ public struct TemplateRenderer: Sendable {
                 } else {
                     append(.text(token.raw), to: &nodes, elseNodes: &elseNodes)
                 }
+            case .elseIf:
+                guard closing == "if" || closing == "unless", elseNodes == nil else {
+                    append(.text(token.raw), to: &nodes, elseNodes: &elseNodes)
+                    continue
+                }
+                // The rest of the chain becomes a nested `if` in the else branch, sharing this block's closing tag.
+                let rest = parseNodes(tokens, &index, closing: closing)
+                let branch = Node.block(kind: "if", condition: Condition(parsing: token.name), body: rest.nodes, elseBody: rest.elseNodes ?? [])
+                return (nodes, [branch], rest.closed)
             case .open:
                 let start = index
                 let inner = parseNodes(tokens, &index, closing: token.blockKind)
                 if inner.closed {
-                    append(.block(kind: token.blockKind, name: token.name, body: inner.nodes, elseBody: inner.elseNodes ?? []), to: &nodes, elseNodes: &elseNodes)
+                    let condition = token.blockKind == "each" ? Condition(name: token.name) : Condition(parsing: token.name)
+                    append(.block(kind: token.blockKind, condition: condition, body: inner.nodes, elseBody: inner.elseNodes ?? []), to: &nodes, elseNodes: &elseNodes)
                 } else {
                     // Unbalanced: keep the tag literally and re-parse what followed it.
                     index = start
@@ -206,17 +257,16 @@ public struct TemplateRenderer: Sendable {
                 output += text
             case .variable(let name, let raw):
                 output += resolve(name, scope: scope) ?? raw
-            case .block(let kind, let name, let body, let elseBody):
-                let value = values[name]
+            case .block(let kind, let condition, let body, let elseBody):
                 switch kind {
                 case "if":
-                    render(value?.isTruthy == true ? body : elseBody, scope: scope, into: &output)
+                    render(test(condition, scope: scope) ? body : elseBody, scope: scope, into: &output)
                 case "unless":
-                    render(value?.isTruthy == true ? elseBody : body, scope: scope, into: &output)
+                    render(test(condition, scope: scope) ? elseBody : body, scope: scope, into: &output)
                 default:
-                    let items: [String] = switch value {
+                    let items: [String] = switch values[condition.name] {
                     case .list(let list): list
-                    case .some(let other) where other.isTruthy: [format(other, name: name)]
+                    case .some(let other) where other.isTruthy: [format(other, name: condition.name)]
                     default: []
                     }
                     if items.isEmpty {
@@ -228,6 +278,44 @@ public struct TemplateRenderer: Sendable {
                 }
             }
         }
+    }
+
+    private func test(_ condition: Condition, scope: Scope) -> Bool {
+        let value: TemplateValue? = switch condition.name {
+        case ".", "this": scope.item.map(TemplateValue.text)
+        case "@index": scope.index.map { .number(Double($0)) }
+        default: values[condition.name]
+        }
+        guard let comparison = condition.comparison else { return value?.isTruthy == true }
+        switch comparison {
+        case .equal: return equals(value, condition)
+        case .notEqual: return !equals(value, condition)
+        case .less: return Self.compare(value, condition.operand, <)
+        case .lessOrEqual: return Self.compare(value, condition.operand, <=)
+        case .greater: return Self.compare(value, condition.operand, >)
+        case .greaterOrEqual: return Self.compare(value, condition.operand, >=)
+        }
+    }
+
+    /// Numbers compare numerically, lists (multiple choice) test membership, everything else compares as inserted.
+    private func equals(_ value: TemplateValue?, _ condition: Condition) -> Bool {
+        switch value {
+        case nil: false
+        case .number(let d): Double(condition.operand) == d
+        case .list(let items): items.contains(condition.operand)
+        case .some(let other): format(other, name: condition.name) == condition.operand
+        }
+    }
+
+    /// Ordering needs a number on both sides (a number value or numeric text such as a choice option).
+    private static func compare(_ value: TemplateValue?, _ operand: String, _ order: (Double, Double) -> Bool) -> Bool {
+        let lhs: Double? = switch value {
+        case .number(let d): d
+        case .text(let s): Double(s.trimmingCharacters(in: .whitespaces))
+        default: nil
+        }
+        guard let lhs, let rhs = Double(operand) else { return false }
+        return order(lhs, rhs)
     }
 
     private func resolve(_ name: String, scope: Scope) -> String? {

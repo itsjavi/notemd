@@ -89,6 +89,7 @@ enum DebugHooks {
             case "history": store.sheet = .history(path: path)
             case "form": store.sheet = .templateForm(path: path)
             case "params": store.sheet = .templateParameters(path: path)
+            case "guide": store.showsTemplateGuide = true
             case "rename": store.sheet = .renameNote(path: path)
             case "folder-new": store.beginCreateFolder(in: query["parent"] ?? "")
             case "folder-edit": store.beginEditFolder(path)

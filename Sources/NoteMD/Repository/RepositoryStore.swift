@@ -116,6 +116,8 @@ enum GitState: Equatable {
     private(set) var lfsMissing = false
     let voiceRecorder = VoiceRecorder()
     var showsVoiceRecorder = false
+    /// The syntax guide popover of the Template Parameters sheet.
+    var showsTemplateGuide = false
 
     @ObservationIgnored private var lfsEnabled = false
     @ObservationIgnored private var notesByPath: [String: Note] = [:]

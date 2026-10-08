@@ -22,11 +22,13 @@ extension ParameterType {
 struct TemplateParametersEditor: View {
     @Environment(\.dismiss) private var dismiss
     let editor: NoteEditor
+    @Binding var showsGuide: Bool
     @State private var parameters: [TemplateParameter]
     @State private var selection: TemplateParameter.ID?
 
-    init(editor: NoteEditor) {
+    init(editor: NoteEditor, showsGuide: Binding<Bool>) {
         self.editor = editor
+        _showsGuide = showsGuide
         let existing = editor.parameters
         _parameters = State(initialValue: existing)
         _selection = State(initialValue: existing.first?.id)
@@ -63,6 +65,7 @@ struct TemplateParametersEditor: View {
             footer
         }
         .frame(width: 780, height: 560)
+        .onDisappear { showsGuide = false }
     }
 
     private var header: some View {
@@ -74,11 +77,20 @@ struct TemplateParametersEditor: View {
                 .background(Circle().fill(Color.orange.opacity(0.15)))
             VStack(alignment: .leading, spacing: 3) {
                 Text("Template Parameters").font(.title3.weight(.semibold))
-                Text("Write `{{name}}` in the note where a value goes. Blocks: `{{#if name}}…{{/if}}`, `{{#each name}}{{.}}{{/each}}`.")
+                Text("Each parameter becomes a field in the Use Template form.")
                     .font(.callout)
                     .foregroundStyle(.secondary)
             }
             Spacer()
+            Button {
+                showsGuide.toggle()
+            } label: {
+                Label("Syntax Guide", systemImage: "curlybraces")
+            }
+            .popover(isPresented: $showsGuide, arrowEdge: .bottom) {
+                TemplateGuideView()
+            }
+            .help("How to write placeholders, conditions and loops")
         }
         .padding(20)
     }

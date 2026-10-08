@@ -17,6 +17,60 @@ import Testing
         #expect(renderer.render("{{#if missing}}x{{else}}fallback{{/if}}") == "fallback")
     }
 
+    @Test func comparisons() {
+        let renderer = TemplateRenderer(values: [
+            "status": .text("in review"), "max": .number(12), "level": .text("3"),
+            "platforms": .list(["iOS", "macOS"]), "flag": .bool(true), "empty": .text(""),
+        ])
+        #expect(renderer.render(#"{{#if status == "in review"}}R{{/if}}{{#if status == 'in review'}}r{{/if}}"#) == "Rr")
+        #expect(renderer.render("{{#if status == done}}D{{else}}not done{{/if}}") == "not done")
+        #expect(renderer.render(#"{{#if status != "done"}}open{{/if}}{{#unless status == "done"}}!{{/unless}}"#) == "open!")
+        #expect(renderer.render("{{#if max >= 10}}big{{/if}}{{#if max>=13}}huge{{/if}}") == "big")
+        #expect(renderer.render("{{#if max == 12.0}}a{{/if}}{{#if max < 12}}b{{/if}}{{#if max <= 12}}c{{/if}}{{#if max > 11.5}}d{{/if}}") == "acd")
+        #expect(renderer.render("{{#if level > 2}}deep{{/if}}{{#if status > 2}}x{{else}}not a number{{/if}}") == "deepnot a number")
+        #expect(renderer.render(#"{{#if platforms == "iOS"}}i{{/if}}{{#if platforms != "watchOS"}}w{{/if}}"#) == "iw")
+        #expect(renderer.render(#"{{#if flag == true}}on{{/if}}{{#if empty == ""}}blank{{/if}}"#) == "onblank")
+        #expect(renderer.render(#"{{#if missing != "x"}}m{{/if}}{{#if missing == "x"}}n{{/if}}"#) == "m")
+    }
+
+    @Test func comparisonsInsideEach() {
+        let renderer = TemplateRenderer(values: ["tags": .list(["bug", "ui", "urgent"])])
+        let template = #"{{#each tags}}{{#if . == "urgent"}}!{{.}}{{else}}{{.}}{{/if}}{{#if @index < 3}},{{/if}}{{/each}}"#
+        #expect(renderer.render(template) == "bug,ui,!urgent")
+    }
+
+    @Test func elseIfChains() {
+        let template = #"{{#if size == "S"}}small{{#elseif size == "M"}}medium{{else if size == "L"}}large{{else}}other{{/if}}"#
+        for (size, expected) in [("S", "small"), ("M", "medium"), ("L", "large"), ("XL", "other")] {
+            #expect(TemplateRenderer(values: ["size": .text(size)]).render(template) == expected)
+        }
+        #expect(TemplateRenderer(values: ["n": .number(5)]).render("{{#unless n > 3}}low{{#elseif n > 4}}high{{/unless}}") == "high")
+        #expect(TemplateRenderer(values: [:]).render("{{#if a}}A{{#elseif b}}B{{/if}}") == "")
+    }
+
+    @Test func standaloneElseIfLinesAreRemoved() {
+        let template = """
+        {{#if n >= 10}}
+        many
+        {{#elseif n >= 1}}
+        some
+        {{else}}
+        none
+        {{/if}}
+        end
+        """
+        #expect(TemplateRenderer(values: ["n": .number(3)]).render(template) == "some\nend")
+    }
+
+    @Test func malformedConditions() {
+        let renderer = TemplateRenderer(values: ["a": .bool(true)])
+        #expect(renderer.render("{{#if a ==}}x{{else}}y{{/if}}") == "y")
+        #expect(renderer.render("{{#elseif a}}stray") == "{{#elseif a}}stray")
+        #expect(renderer.render("{{#if a}}x{{else}}y{{#elseif a}}z{{/if}}") == "x")
+        #expect(renderer.render("{{#each a}}x{{#elseif a}}y{{/each}}") == "x{{#elseif a}}y")
+        #expect(renderer.render("{{#if a}}x{{#elseif b}}y") == "{{#if a}}x{{#elseif b}}y")
+    }
+
     @Test func each() {
         let renderer = TemplateRenderer(values: ["files": .list(["a.swift", "b.swift"])])
         #expect(renderer.render("{{#each files}}{{@index}}. {{.}}\n{{/each}}") == "1. a.swift\n2. b.swift\n")
@@ -61,6 +115,8 @@ import Testing
 
     @Test func referencedNames() {
         #expect(TemplateRenderer.referencedNames(in: "{{a}} {{#if b}}{{c}}{{/if}} {{.}} {{@today}}") == ["a", "b", "c"])
+        let conditions = #"{{#if status == "x"}}{{#elseif max > 1}}{{/if}}{{#each tags}}{{#if . == "a"}}{{/if}}{{/each}}"#
+        #expect(TemplateRenderer.referencedNames(in: conditions) == ["status", "max", "tags"])
     }
 
     @Test func requiredValidation() {

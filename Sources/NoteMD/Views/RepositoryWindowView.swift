@@ -51,7 +51,7 @@ struct RepositoryWindowView: View {
             }
         case .templateParameters(let path):
             if let editor = store.editor, editor.path == path {
-                TemplateParametersEditor(editor: editor)
+                TemplateParametersEditor(editor: editor, showsGuide: Bindable(store).showsTemplateGuide)
             } else {
                 SheetUnavailable()
             }
