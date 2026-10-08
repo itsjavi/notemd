@@ -146,6 +146,26 @@ enum DebugHooks {
             case "text": textView.insertText(query["text"] ?? "", replacementRange: textView.selectedRange())
             default: break
             }
+        case "ui/sheet-key":
+            // Focuses the index-th multi-line box of the window's sheet, types `text` at its end, then replays `key`
+            // the way AppKit routes it: key equivalents (default buttons) first, then the focused view.
+            guard let window = store.flatMap({ s in windows.controllers.first { $0.store === s }?.window }),
+                  let sheet = window.attachedSheet, let content = sheet.contentView else { return }
+            let boxes = multilineTextViews(in: content)
+            guard let textView = boxes[safe: Int(query["index"] ?? "0") ?? 0] else { return }
+            sheet.makeFirstResponder(textView)
+            textView.setSelectedRange(NSRange(location: (textView.string as NSString).length, length: 0))
+            if let text = query["text"] { textView.insertText(text, replacementRange: textView.selectedRange()) }
+            guard let key = query["key"], ["return", "cmd-return"].contains(key) else { return }
+            Task {
+                try? await Task.sleep(for: .milliseconds(500))  // let SwiftUI see the focus change
+                guard let event = NSEvent.keyEvent(
+                    with: .keyDown, location: .zero, modifierFlags: key == "cmd-return" ? .command : [],
+                    timestamp: ProcessInfo.processInfo.systemUptime, windowNumber: sheet.windowNumber, context: nil,
+                    characters: "\r", charactersIgnoringModifiers: "\r", isARepeat: false, keyCode: 36
+                ) else { return }
+                if !sheet.performKeyEquivalent(with: event) { sheet.sendEvent(event) }
+            }
         case "ui/attachment-mode":
             if let mode = AttachmentImportMode(rawValue: query["value"] ?? "") { AppSettings.shared.attachmentImportMode = mode }
         case "ui/drop-files", "ui/paste-file", "ui/paste-image":
@@ -248,6 +268,12 @@ enum DebugHooks {
             if let found = findTextView(in: subview) { return found }
         }
         return nil
+    }
+
+    /// Editable text views that aren't field editors (SwiftUI `TextEditor`s), in view order.
+    private static func multilineTextViews(in view: NSView) -> [NSTextView] {
+        if let textView = view as? NSTextView, textView.isEditable, !textView.isFieldEditor { return [textView] }
+        return view.subviews.flatMap(multilineTextViews)
     }
 
     /// Only temp locations, after resolving symlinks, so a link can't touch user files.

@@ -48,6 +48,7 @@ struct TemplateFormView: View {
     @State private var copied = false
     @State private var showSave = false
     @State private var showMissing = false
+    @FocusState private var multilineFocus: String?
 
     enum OutputMode: String, CaseIterable, Identifiable {
         case text = "Text", preview = "Preview"
@@ -99,7 +100,7 @@ struct TemplateFormView: View {
                 Text("This template has no parameters.").foregroundStyle(.secondary)
             }
             ForEach(parameters) { parameter in
-                ParameterField(parameter: parameter, value: binding(for: parameter), baseDirectory: source.directory, highlightMissing: showMissing && missing.contains(parameter.name))
+                ParameterField(parameter: parameter, value: binding(for: parameter), baseDirectory: source.directory, highlightMissing: showMissing && missing.contains(parameter.name), multilineFocus: $multilineFocus)
             }
         }
         .formStyle(.grouped)
@@ -174,7 +175,8 @@ struct TemplateFormView: View {
             } label: {
                 Label("Copy", systemImage: "doc.on.doc")
             }
-            .keyboardShortcut(.defaultAction)
+            // Return belongs to a focused multi-line field.
+            .keyboardShortcut(multilineFocus == nil ? .defaultAction : KeyboardShortcut(.return, modifiers: .command))
             .buttonStyle(.borderedProminent)
         }
         .padding(16)
@@ -242,6 +244,7 @@ private struct ParameterField: View {
     @Binding var value: TemplateValue
     let baseDirectory: URL?
     var highlightMissing: Bool
+    var multilineFocus: FocusState<String?>.Binding
 
     var body: some View {
         VStack(alignment: .leading, spacing: 4) {
@@ -269,9 +272,7 @@ private struct ParameterField: View {
         case .textarea:
             VStack(alignment: .leading, spacing: 6) {
                 label
-                TextField("", text: text, prompt: Text(parameter.placeholder ?? ""), axis: .vertical)
-                    .lineLimit(3...12)
-                    .labelsHidden()
+                MultilineTextBox(text: text, prompt: parameter.placeholder ?? "", lines: 3...12, focus: multilineFocus, focusID: parameter.name)
             }
         case .number:
             TextField(value: Binding(get: { if case .number(let d) = value { d } else { 0 } }, set: { value = .number($0) }), format: .number) { label }
@@ -314,13 +315,10 @@ private struct ParameterField: View {
         case .list:
             VStack(alignment: .leading, spacing: 6) {
                 label
-                TextField("", text: Binding(
-                    get: { list.joined(separator: "\n") },
-                    set: { value = .list($0.components(separatedBy: "\n")) }
-                ), prompt: Text(parameter.placeholder ?? "One item per line"), axis: .vertical)
-                .lineLimit(3...10)
-                .labelsHidden()
-                .onSubmit {}
+                ListTextBox(
+                    items: Binding(get: { list }, set: { value = .list($0) }),
+                    prompt: parameter.placeholder ?? "One item per line", lines: 3...10, focus: multilineFocus, focusID: parameter.name
+                )
             }
         }
     }

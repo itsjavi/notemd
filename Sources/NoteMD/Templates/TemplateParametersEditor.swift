@@ -25,6 +25,7 @@ struct TemplateParametersEditor: View {
     @Binding var showsGuide: Bool
     @State private var parameters: [TemplateParameter]
     @State private var selection: TemplateParameter.ID?
+    @FocusState private var multilineFocus: String?
 
     init(editor: NoteEditor, showsGuide: Binding<Bool>) {
         self.editor = editor
@@ -172,7 +173,8 @@ struct TemplateParametersEditor: View {
 
     @ViewBuilder private var detail: some View {
         if let selection, let index = parameters.firstIndex(where: { $0.id == selection }) {
-            ParameterForm(parameter: $parameters[index], isDuplicate: duplicateNames.contains(parameters[index].name))
+            ParameterForm(parameter: $parameters[index], isDuplicate: duplicateNames.contains(parameters[index].name), multilineFocus: $multilineFocus)
+                .id(selection)
         } else {
             ContentUnavailableView("No Parameter Selected", systemImage: "slider.horizontal.3", description: Text("Add a parameter for each value the template asks for."))
         }
@@ -193,7 +195,8 @@ struct TemplateParametersEditor: View {
                 editor.setParameters(parameters)
                 dismiss()
             }
-            .keyboardShortcut(.defaultAction)
+            // Return belongs to a focused multi-line field.
+            .keyboardShortcut(multilineFocus == nil ? .defaultAction : KeyboardShortcut(.return, modifiers: .command))
             .buttonStyle(.borderedProminent)
             .disabled(!isValid)
         }
@@ -215,6 +218,7 @@ struct TemplateParametersEditor: View {
 private struct ParameterForm: View {
     @Binding var parameter: TemplateParameter
     var isDuplicate: Bool
+    var multilineFocus: FocusState<String?>.Binding
     @State private var newOption = ""
 
     var body: some View {
@@ -282,7 +286,7 @@ private struct ParameterForm: View {
             }
 
             Section("Default") {
-                DefaultValueEditor(parameter: $parameter)
+                DefaultValueEditor(parameter: $parameter, multilineFocus: multilineFocus)
             }
         }
         .formStyle(.grouped)
@@ -306,12 +310,14 @@ private struct ParameterForm: View {
 /// Edits a parameter's default value with the control matching its type.
 private struct DefaultValueEditor: View {
     @Binding var parameter: TemplateParameter
+    var multilineFocus: FocusState<String?>.Binding
 
     var body: some View {
         switch parameter.type {
-        case .text, .textarea, .file, .folder:
-            TextField("Default", text: textBinding, prompt: Text("None"), axis: parameter.type == .textarea ? .vertical : .horizontal)
-                .lineLimit(parameter.type == .textarea ? 2...6 : 1...1)
+        case .text, .file, .folder:
+            TextField("Default", text: textBinding, prompt: Text("None"))
+        case .textarea:
+            MultilineTextBox(text: textBinding, prompt: "None", lines: 2...6, focus: multilineFocus, focusID: "default")
         case .number:
             TextField("Default", value: Binding(
                 get: { if case .number(let d) = parameter.defaultValue { d } else { nil } },
@@ -345,14 +351,10 @@ private struct DefaultValueEditor: View {
                 Text("Add options first.").foregroundStyle(.secondary)
             }
         case .list:
-            TextField("Default items", text: Binding(
-                get: { listDefault.joined(separator: "\n") },
-                set: { text in
-                    let items = text.split(separator: "\n").map { $0.trimmingCharacters(in: .whitespaces) }.filter { !$0.isEmpty }
-                    parameter.defaultValue = items.isEmpty ? nil : .list(items)
-                }
-            ), prompt: Text("One item per line"), axis: .vertical)
-            .lineLimit(2...6)
+            ListTextBox(
+                items: Binding(get: { listDefault }, set: { parameter.defaultValue = $0.isEmpty ? nil : .list($0) }),
+                prompt: "One item per line", lines: 2...6, focus: multilineFocus, focusID: "default"
+            )
         case .date:
             Toggle("Today", isOn: Binding(
                 get: { parameter.defaultValue == nil },

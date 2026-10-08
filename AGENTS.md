@@ -269,6 +269,8 @@ note paths must be plain repository-relative paths.
 - `ui/sheet?name=history|form|params|rename|folder-new|folder-edit&path=`, `ui/close-sheet`
 - `ui/move?note=&folder=`, `ui/move-folder?path=&parent=`, `ui/rename?note=&name=`, `ui/trash?note=`, `ui/restore-deleted?path=`
 - `ui/editor-command?name=tab|backtab|newline|text&text=&select=end|all[&target=document]`, `ui/settings`
+- `ui/sheet-key?index=&text=&key=return|cmd-return` (types into the index-th multi-line box of the open sheet, then
+  routes the key like AppKit: default buttons first). Avoid it in the Use Template form, where a stray Return copies.
 - `ui/attachment-mode?value=ask|copy|link`, `ui/drop-files?paths=a,b`, `ui/paste-file?path=`, `ui/paste-image?path=`
   (absolute temp paths; `select=end`, `target=document`), `ui/service-note?text=&file=`, `ui/lfs-check`
 - `ui/voice-start?from=<clip>|seconds=` (recorder with the microphone replaced by that clip), `ui/voice-stop`, `ui/voice-cancel`,
