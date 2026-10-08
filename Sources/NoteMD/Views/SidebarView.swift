@@ -4,6 +4,9 @@ import SwiftUI
 struct SidebarView: View {
     @Environment(RepositoryStore.self) private var store
     @State private var confirmEmptyDeleted = false
+    // Collapsed from the section headers; remembered across launches (all windows share them).
+    @AppStorage("sidebarFoldersExpanded") private var foldersExpanded = true
+    @AppStorage("sidebarTagsExpanded") private var tagsExpanded = true
 
     var body: some View {
         @Bindable var store = store
@@ -45,7 +48,7 @@ struct SidebarView: View {
                     }
                 }
 
-                Section {
+                Section(isExpanded: $foldersExpanded) {
                     OutlineGroup(store.root.children, children: \.outlineChildren) { folder in
                         FolderRow(folder: folder)
                     }
@@ -65,7 +68,7 @@ struct SidebarView: View {
                 }
 
                 if !store.tags.isEmpty {
-                    Section("Tags") {
+                    Section("Tags", isExpanded: $tagsExpanded) {
                         ForEach(store.tags) { tag in
                             Label(tag.tag, systemImage: "number")
                                 .badge(tag.count)

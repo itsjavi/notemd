@@ -266,6 +266,7 @@ note paths must be plain paths relative to the repository's `files/` folder (dec
 for incognito notes. `debug/state` reports the `layout:` (`files` or `root`) and the `incognito:` notes.
 
 - `ui/create-repo?path=` (seeds example notes), `ui/open-repo?path=`, `ui/open-file?path=`, `ui/welcome`
+- `ui/sidebar-section?name=folders|tags&expanded=0|1` (collapses the sidebar section, as its header does)
 - `ui/sidebar?item=all|templates|incognito|deleted` or `folder=`/`tag=`, `ui/select?note=`, `ui/search?q=`, `ui/mode?value=edit|split|preview`
 - `ui/new-note?title=&body=[&incognito=1]`, `ui/delete-incognito?note=` (as confirmed; `ui/trash` only asks),
   `ui/close-repo` (closes the window, discarding its incognito notes), `ui/type?text=`, `ui/tags?value=a,b`, `ui/folder-style?path=&icon=&color=`

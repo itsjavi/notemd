@@ -51,6 +51,10 @@ enum DebugHooks {
             }
         case "ui/welcome":
             windows.showWelcome()
+        case "ui/sidebar-section":
+            // Same defaults the Folders and Tags section headers collapse.
+            guard let name = query["name"], ["folders", "tags"].contains(name) else { return }
+            UserDefaults.standard.set(query["expanded"] != "0", forKey: name == "folders" ? "sidebarFoldersExpanded" : "sidebarTagsExpanded")
         case "ui/sidebar":
             guard let store else { return }
             if let folder = query["folder"] { store.sidebarSelection = .folder(folder) }
