@@ -59,6 +59,8 @@ struct NoteEditorPane: View {
             indentation: settings.indentation,
             readableWidth: settings.readableLineWidth && settings.editorMode != .split ? 740 : 0,
             spellChecking: settings.spellChecking,
+            showsLineNumbers: settings.showLineNumbers,
+            showsInvisibles: settings.showInvisibles,
             focusOnAppear: consumeFocus(),
             attachmentImporter: store.attachmentImporter(forNoteAt: editor.path),
             bridge: editor.textBridge,

@@ -83,6 +83,9 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
     var editorFontSize: Double { didSet { defaults.set(editorFontSize, forKey: Keys.editorFontSize) } }
     var readableLineWidth: Bool { didSet { defaults.set(readableLineWidth, forKey: Keys.readableLineWidth) } }
     var spellChecking: Bool { didSet { defaults.set(spellChecking, forKey: Keys.spellChecking) } }
+    var showLineNumbers: Bool { didSet { defaults.set(showLineNumbers, forKey: Keys.showLineNumbers) } }
+    /// Draws spaces, tabs and line breaks in the editor.
+    var showInvisibles: Bool { didSet { defaults.set(showInvisibles, forKey: Keys.showInvisibles) } }
     /// Tab key inserts a tab character instead of spaces.
     var indentWithTabs: Bool { didSet { defaults.set(indentWithTabs, forKey: Keys.indentWithTabs) } }
     /// Spaces per indent level, and the display width of tab characters.
@@ -107,6 +110,8 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
         static let editorFontSize = "editorFontSize"
         static let readableLineWidth = "readableLineWidth"
         static let spellChecking = "spellChecking"
+        static let showLineNumbers = "showLineNumbers"
+        static let showInvisibles = "showInvisibles"
         static let indentWithTabs = "indentWithTabs"
         static let indentWidth = "indentWidth"
         static let showFrontMatter = "showFrontMatter"
@@ -127,6 +132,8 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
             Keys.editorFontSize: 15.0,
             Keys.readableLineWidth: true,
             Keys.spellChecking: true,
+            Keys.showLineNumbers: false,
+            Keys.showInvisibles: false,
             Keys.indentWithTabs: false,
             Keys.indentWidth: 4,
             Keys.showFrontMatter: false,
@@ -142,6 +149,8 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
         editorFontSize = defaults.double(forKey: Keys.editorFontSize)
         readableLineWidth = defaults.bool(forKey: Keys.readableLineWidth)
         spellChecking = defaults.bool(forKey: Keys.spellChecking)
+        showLineNumbers = defaults.bool(forKey: Keys.showLineNumbers)
+        showInvisibles = defaults.bool(forKey: Keys.showInvisibles)
         indentWithTabs = defaults.bool(forKey: Keys.indentWithTabs)
         indentWidth = min(max(defaults.integer(forKey: Keys.indentWidth), 1), 8)
         showFrontMatter = defaults.bool(forKey: Keys.showFrontMatter)

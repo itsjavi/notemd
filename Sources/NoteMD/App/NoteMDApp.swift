@@ -138,6 +138,8 @@ struct NoteMDCommands: Commands {
                     for controller in windows.controllers { controller.store.reopenCurrentNote() }
                 }
             ))
+            Toggle("Show Line Numbers", isOn: Bindable(settings).showLineNumbers)
+            Toggle("Show Invisible Characters", isOn: Bindable(settings).showInvisibles)
             Divider()
         }
         CommandGroup(after: .textEditing) {

@@ -192,6 +192,38 @@ enum DebugHooks {
             let recorder = query["target"] == "document" ? debugDocument?.model.voiceRecorder : store?.voiceRecorder
             recorder?.simulatedClip = { url in makeClip(at: url, from: source, query: query) }
             if query["target"] == "document" { debugDocument?.model.startVoiceNote() } else { store?.startVoiceNote() }
+        case "ui/editor-option":
+            // View > Show Line Numbers / Show Invisible Characters.
+            let on = query["value"] == "1"
+            switch query["name"] {
+            case "line-numbers": AppSettings.shared.showLineNumbers = on
+            case "invisibles": AppSettings.shared.showInvisibles = on
+            default: break
+            }
+        case "debug/editor-bench":
+            // Times typing and full redraws in the first editor (target=document for a document window).
+            guard let textView = editorTextView(query), let out = query["out"].flatMap({ safePath($0) }) else { return }
+            textView.setSelectedRange(NSRange(location: (textView.string as NSString).length / 2, length: 0))
+            let clock = ContinuousClock()
+            let typing = clock.measure {
+                for _ in 0..<50 {
+                    textView.insertText("x", replacementRange: textView.selectedRange())
+                    textView.displayIfNeeded()
+                }
+                for _ in 0..<50 {
+                    textView.deleteBackward(nil)
+                    textView.displayIfNeeded()
+                }
+            }
+            let scrolling = clock.measure {
+                let height = textView.bounds.height
+                for step in 0..<40 {
+                    textView.scroll(NSPoint(x: 0, y: height * Double(step) / 40))
+                    textView.enclosingScrollView?.displayIfNeeded()
+                }
+            }
+            let lines = (textView.string as NSString).components(separatedBy: "\n").count
+            try? "lines: \(lines)\ntyping: \(typing / 100) per keystroke\nscrolling: \(scrolling / 40) per scroll step\n".write(toFile: out, atomically: true, encoding: .utf8)
         case "ui/document-active-content":
             // The HTML preview's Scripts and Remote Content toggle of the first document window.
             debugDocument?.model.allowsActiveContent = query["value"] == "1"
@@ -298,6 +330,8 @@ enum DebugHooks {
         lines.append("windows: \(NSApp.windows.filter(\.isVisible).map(\.title))")
         lines.append("keyWindow: \(NSApp.keyWindow?.title ?? "-")")
         lines.append("repositories: \(windows.controllers.map { $0.store.displayPath })")
+        lines.append("lineNumbers: \(AppSettings.shared.showLineNumbers)")
+        lines.append("invisibles: \(AppSettings.shared.showInvisibles)")
         lines.append("documents: \(NSDocumentController.shared.documents.compactMap { $0.fileURL?.path })")
         lines.append("documentKinds: \(NSDocumentController.shared.documents.compactMap { ($0 as? TextFileDocument).map { "\($0.model.kind)\($0.model.allowsActiveContent ? "+active" : "")" } })")
         if let store {

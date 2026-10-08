@@ -14,9 +14,47 @@ final class MarkdownTextView: NSTextView {
         didSet { if (oldValue == nil) != (attachmentImporter == nil) { updateDragTypeRegistration() } }
     }
 
+    /// Draws a line-number gutter in the left margin, right next to the text.
+    var showsLineNumbers = false {
+        didSet {
+            guard showsLineNumbers != oldValue else { return }
+            lineStarts = nil
+            if showsLineNumbers {
+                _ = currentLineStarts()  // sizes the gutter before the first draw
+                addSubview(gutterView)
+            } else {
+                gutterView.removeFromSuperview()
+            }
+            updateInsets()
+        }
+    }
+
+    private lazy var gutterView = LineNumberGutterView(textView: self)
+
+    /// The text view keeps its own TextKit 1 storage alive (see `make(frame:)`).
+    private var ownedStorage: NSTextStorage?
+
+    /// A text view on an explicit TextKit 1 stack whose layout manager can draw invisible characters.
+    static func make(frame: NSRect) -> MarkdownTextView {
+        let storage = NSTextStorage()
+        let layoutManager = EditorLayoutManager()
+        storage.addLayoutManager(layoutManager)
+        let container = NSTextContainer(size: NSSize(width: frame.width, height: .greatestFiniteMagnitude))
+        container.widthTracksTextView = true
+        layoutManager.addTextContainer(container)
+        let textView = MarkdownTextView(frame: frame, textContainer: container)
+        textView.ownedStorage = storage
+        return textView
+    }
+
     override func setFrameSize(_ newSize: NSSize) {
         super.setFrameSize(newSize)
         updateInsets()
+        updateGutterFrame()
+    }
+
+    override var font: NSFont? {
+        didSet { if showsLineNumbers { updateInsets() } }
     }
 
     // MARK: Attachments
@@ -84,9 +122,135 @@ final class MarkdownTextView: NSTextView {
 
     private func updateInsets() {
         let minimum: CGFloat = 28
-        let horizontal = readableWidth > 0 ? max(minimum, (bounds.width - readableWidth) / 2) : minimum
-        let inset = NSSize(width: horizontal.rounded(), height: 22)
-        if textContainerInset != inset { textContainerInset = inset }
+        let margin = readableWidth > 0 ? max(minimum, (bounds.width - readableWidth) / 2) : minimum
+        // The gutter sits in the left margin and widens it only when the margin is too narrow for it.
+        let left = showsLineNumbers ? max(margin, minimum + gutterWidth) : margin
+        let inset = NSSize(width: ((left + margin) / 2).rounded(), height: 22)
+        let shift = ((left - margin) / 2).rounded()
+        let shiftChanged = shift != gutterShift
+        gutterShift = shift
+        if textContainerInset != inset {
+            textContainerInset = inset
+        } else if shiftChanged {
+            invalidateTextContainerOrigin()
+        }
+        updateGutterFrame()
+    }
+
+    private func updateGutterFrame() {
+        guard showsLineNumbers else { return }
+        let frame = NSRect(x: 0, y: 0, width: textContainerOrigin.x, height: bounds.height)
+        if gutterView.frame != frame {
+            gutterView.frame = frame
+            gutterView.needsDisplay = true
+        }
+    }
+
+    // MARK: Line numbers
+
+    /// How far the text container moves right of its symmetric inset, making the left margin wider than the right.
+    private var gutterShift: CGFloat = 0
+    /// UTF-16 offsets where logical lines start; nil after an edit until recomputed.
+    private var lineStarts: [Int]?
+    private var gutterDigits = 2
+
+    override var textContainerOrigin: NSPoint {
+        let origin = super.textContainerOrigin
+        return NSPoint(x: origin.x + gutterShift, y: origin.y)
+    }
+
+    private var lineNumberFont: NSFont {
+        .monospacedDigitSystemFont(ofSize: max(9, ((font?.pointSize ?? 13) * 0.7).rounded()), weight: .regular)
+    }
+
+    private var gutterWidth: CGFloat {
+        CGFloat(gutterDigits) * ("8" as NSString).size(withAttributes: [.font: lineNumberFont]).width + 16
+    }
+
+    /// The visible part of the left margin, where the numbers are drawn.
+
+    /// Called for every character edit (from the text storage delegate).
+    func textDidEdit() {
+        lineStarts = nil
+        guard showsLineNumbers else { return }
+        // Not during the storage's edit processing: the gutter may need to widen, which changes layout.
+        DispatchQueue.main.async { [weak self] in
+            guard let self, showsLineNumbers else { return }
+            _ = currentLineStarts()
+            gutterView.setNeedsDisplay(gutterView.visibleRect)
+        }
+    }
+
+    override func setSelectedRanges(_ ranges: [NSValue], affinity: NSSelectionAffinity, stillSelecting: Bool) {
+        super.setSelectedRanges(ranges, affinity: affinity, stillSelecting: stillSelecting)
+        if showsLineNumbers { gutterView.setNeedsDisplay(gutterView.visibleRect) }  // the current line's number is highlighted
+    }
+
+    private func currentLineStarts() -> [Int] {
+        if let lineStarts { return lineStarts }
+        let text = string as NSString
+        var starts = [0]
+        var index = 0
+        while index < text.length {
+            var end = 0
+            var contentsEnd = 0
+            text.getLineStart(nil, end: &end, contentsEnd: &contentsEnd, for: NSRange(location: index, length: 0))
+            // A line break: the next line starts at `end`, even when that is the empty line at the very end.
+            if end > contentsEnd { starts.append(end) }
+            index = end
+        }
+        lineStarts = starts
+        let digits = max(2, String(starts.count).count)
+        if digits != gutterDigits {
+            gutterDigits = digits
+            updateInsets()
+        }
+        return starts
+    }
+
+    private static func lineIndex(of location: Int, in starts: [Int]) -> Int {
+        var low = 0
+        var high = starts.count - 1
+        while low < high {
+            let mid = (low + high + 1) / 2
+            if starts[mid] <= location { low = mid } else { high = mid - 1 }
+        }
+        return low
+    }
+
+    /// Numbers logical lines (a wrapped line gets one number) right-aligned against the text, on each line's baseline.
+    /// Drawn by the gutter subview: what the text view draws itself after `super.draw` never reaches the screen.
+    fileprivate func drawLineNumbers(in dirtyRect: NSRect) {
+        guard let layoutManager, let container = textContainer else { return }
+        let origin = textContainerOrigin
+        let right = origin.x - 10
+        guard dirtyRect.minX < right else { return }
+        let starts = currentLineStarts()
+        let current = Self.lineIndex(of: selectedRange().location, in: starts)
+        let numberFont = lineNumberFont
+        let area = NSRect(x: 0, y: dirtyRect.minY - origin.y, width: container.size.width, height: dirtyRect.height)
+
+        func drawNumber(_ line: Int, baseline: CGFloat) {
+            let attributes: [NSAttributedString.Key: Any] = [
+                .font: numberFont,
+                .foregroundColor: line == current ? NSColor.secondaryLabelColor : NSColor.tertiaryLabelColor,
+            ]
+            let label = String(line + 1) as NSString
+            let width = label.size(withAttributes: attributes).width
+            label.draw(at: NSPoint(x: right - width, y: baseline - numberFont.ascender), withAttributes: attributes)
+        }
+
+        let glyphs = layoutManager.glyphRange(forBoundingRect: area, in: container)
+        layoutManager.enumerateLineFragments(forGlyphRange: glyphs) { fragment, _, _, range, _ in
+            let character = layoutManager.characterIndexForGlyph(at: range.location)
+            let line = Self.lineIndex(of: character, in: starts)
+            guard starts[line] == character else { return }  // the continuation of a wrapped line
+            drawNumber(line, baseline: origin.y + fragment.minY + layoutManager.location(forGlyphAt: range.location).y)
+        }
+        // The empty line after a final line break has no glyphs.
+        if layoutManager.extraLineFragmentTextContainer != nil, layoutManager.extraLineFragmentRect.intersects(area) {
+            drawNumber(starts.count - 1, baseline: origin.y + layoutManager.extraLineFragmentRect.minY + (font?.ascender ?? numberFont.ascender))
+        }
     }
 
     // MARK: Lists
@@ -336,5 +500,26 @@ final class MarkdownTextView: NSTextView {
         } else {
             setSelectedRange(NSRange(location: lineRange.location, length: newLength))
         }
+    }
+}
+
+/// The line-number gutter: a transparent subview over the text view's left margin that scrolls with the text.
+/// Clicks pass through to the text view.
+private final class LineNumberGutterView: NSView {
+    weak var textView: MarkdownTextView?
+
+    init(textView: MarkdownTextView) {
+        self.textView = textView
+        super.init(frame: .zero)
+    }
+
+    required init?(coder: NSCoder) { nil }
+
+    override var isFlipped: Bool { true }
+
+    override func hitTest(_ point: NSPoint) -> NSView? { nil }
+
+    override func draw(_ dirtyRect: NSRect) {
+        textView?.drawLineNumbers(in: dirtyRect)
     }
 }

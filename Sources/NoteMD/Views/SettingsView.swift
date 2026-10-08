@@ -61,6 +61,8 @@ struct SettingsView: View {
                     }
                     Toggle("Limit line width for comfortable reading", isOn: $settings.readableLineWidth)
                     Toggle("Check spelling while typing", isOn: $settings.spellChecking)
+                    Toggle("Show line numbers", isOn: $settings.showLineNumbers)
+                    Toggle("Show invisible characters", isOn: $settings.showInvisibles)
                 }
                 Section {
                     Picker("Indent using", selection: $settings.indentWithTabs) {

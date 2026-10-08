@@ -302,6 +302,8 @@ struct DocumentEditorView: View {
             indentation: settings.indentation,
             readableWidth: model.isMarkdown && settings.readableLineWidth && mode != .split ? 760 : 0,
             spellChecking: settings.spellChecking,
+            showsLineNumbers: settings.showLineNumbers,
+            showsInvisibles: settings.showInvisibles,
             attachmentImporter: model.attachmentImporter,
             bridge: model.textBridge,
             onChange: { model.edit($0) },

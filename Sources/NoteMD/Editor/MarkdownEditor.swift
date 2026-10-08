@@ -37,6 +37,8 @@ struct MarkdownEditor: NSViewRepresentable {
     var indentation = Indentation(usesTabs: false, width: 4)
     var readableWidth: CGFloat
     var spellChecking: Bool
+    var showsLineNumbers = false
+    var showsInvisibles = false
     var focusOnAppear = false
     var attachmentImporter: AttachmentImporter?
     /// Gives code outside the view (voice notes, transcripts) access to the live text view.
@@ -52,12 +54,10 @@ struct MarkdownEditor: NSViewRepresentable {
         scrollView.drawsBackground = false
         scrollView.hasVerticalScroller = true
         scrollView.autohidesScrollers = true
-        let textView = MarkdownTextView(frame: scrollView.contentView.bounds)
+        let textView = MarkdownTextView.make(frame: scrollView.contentView.bounds)
         textView.autoresizingMask = [.width]
         textView.isVerticallyResizable = true
         textView.isHorizontallyResizable = false
-        textView.textContainer?.widthTracksTextView = true
-        textView.textContainer?.containerSize = NSSize(width: scrollView.contentSize.width, height: .greatestFiniteMagnitude)
         textView.minSize = NSSize(width: 0, height: scrollView.contentSize.height)
         textView.maxSize = NSSize(width: CGFloat.greatestFiniteMagnitude, height: .greatestFiniteMagnitude)
         textView.drawsBackground = false
@@ -134,6 +134,8 @@ struct MarkdownEditor: NSViewRepresentable {
         bridge?.textView = textView
         textView.isContinuousSpellCheckingEnabled = spellChecking && isMarkdown
         textView.readableWidth = readableWidth
+        textView.showsLineNumbers = showsLineNumbers
+        (textView.layoutManager as? EditorLayoutManager)?.showsInvisibles = showsInvisibles
         let changed = coordinator.styledFont != font || textView.isMarkdown != isMarkdown || textView.indentation != indentation
         textView.isMarkdown = isMarkdown
         textView.indentation = indentation
@@ -169,6 +171,7 @@ struct MarkdownEditor: NSViewRepresentable {
         nonisolated func textStorage(_ textStorage: NSTextStorage, didProcessEditing editedMask: NSTextStorageEditActions, range editedRange: NSRange, changeInLength delta: Int) {
             guard editedMask.contains(.editedCharacters) else { return }
             MainActor.assumeIsolated {
+                textView?.textDidEdit()
                 guard !isHighlighting else { return }
                 // Restyle after the edit settles (attributes can't change layout mid-processing safely).
                 DispatchQueue.main.async { [weak self] in

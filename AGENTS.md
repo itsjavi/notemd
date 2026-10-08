@@ -271,6 +271,8 @@ note paths must be plain repository-relative paths.
   `ui/remove-deleted?path=|all=1` (hides Recently Deleted entries). The background Test build can commit a minute late:
   wait for `git log` before relying on history
 - `ui/editor-command?name=tab|backtab|newline|text&text=&select=end|all[&target=document]`, `ui/settings`
+- `ui/editor-option?name=line-numbers|invisibles&value=0|1`; `debug/editor-bench?out=[&target=document]` times typing
+  and redraws in the open editor
 - `ui/sheet-key?index=&text=&key=return|cmd-return` (types into the index-th multi-line box of the open sheet, then
   routes the key like AppKit: default buttons first). Avoid it in the Use Template form, where a stray Return copies.
 - `ui/attachment-mode?value=ask|copy|link`, `ui/drop-files?paths=a,b`, `ui/paste-file?path=`, `ui/paste-image?path=`
