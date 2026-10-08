@@ -192,6 +192,9 @@ enum DebugHooks {
             let recorder = query["target"] == "document" ? debugDocument?.model.voiceRecorder : store?.voiceRecorder
             recorder?.simulatedClip = { url in makeClip(at: url, from: source, query: query) }
             if query["target"] == "document" { debugDocument?.model.startVoiceNote() } else { store?.startVoiceNote() }
+        case "ui/document-active-content":
+            // The HTML preview's Scripts and Remote Content toggle of the first document window.
+            debugDocument?.model.allowsActiveContent = query["value"] == "1"
         case "ui/voice-stop", "ui/voice-cancel":
             let recorder = query["target"] == "document" ? debugDocument?.model.voiceRecorder : store?.voiceRecorder
             if verb == "ui/voice-stop" { recorder?.stop() } else { recorder?.cancel() }
@@ -296,6 +299,7 @@ enum DebugHooks {
         lines.append("keyWindow: \(NSApp.keyWindow?.title ?? "-")")
         lines.append("repositories: \(windows.controllers.map { $0.store.displayPath })")
         lines.append("documents: \(NSDocumentController.shared.documents.compactMap { $0.fileURL?.path })")
+        lines.append("documentKinds: \(NSDocumentController.shared.documents.compactMap { ($0 as? TextFileDocument).map { "\($0.model.kind)\($0.model.allowsActiveContent ? "+active" : "")" } })")
         if let store {
             lines.append("store: \(store.displayPath)")
             lines.append("loaded: \(store.isLoaded)")

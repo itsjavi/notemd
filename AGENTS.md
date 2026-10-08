@@ -278,6 +278,7 @@ note paths must be plain repository-relative paths.
 - `ui/voice-start?from=<clip>|seconds=` (recorder with the microphone replaced by that clip), `ui/voice-stop`, `ui/voice-cancel`,
   `ui/transcribe?src=<link destination>&lang=en-US`, `ui/sheet?name=transcribe|recorder&src=`
 - `ui/commit-now`, `ui/restore?path=&rev=`, `ui/window-size?w=&h=`, `ui/appearance?value=dark|light`
+- `ui/document-active-content?value=0|1` (the HTML preview's Scripts and Remote Content toggle, first document)
 - `debug/state?out=/private/tmp/state.txt` writes a `key: value` state dump
 
 Capture windows without activating the app: `swift scripts/window-screenshot.swift "NoteMD Test" /private/tmp/shot`.

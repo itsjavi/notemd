@@ -4,12 +4,33 @@ import Observation
 import SwiftUI
 import UniformTypeIdentifiers
 
+/// What a document window offers: Markdown and HTML get a preview, other text is edited as is.
+enum DocumentKind: Sendable {
+    case markdown, html, plainText
+
+    nonisolated static func detect(typeName: String, url: URL?) -> DocumentKind {
+        if let ext = url?.pathExtension.lowercased(), !ext.isEmpty {
+            if ["md", "markdown", "mdown", "mkd", "mdx"].contains(ext) { return .markdown }
+            return ["html", "htm"].contains(ext) ? .html : .plainText
+        }
+        if typeName == "Markdown Document" { return .markdown }
+        if typeName == "HTML Document" { return .html }
+        guard let type = UTType(typeName) else { return .plainText }
+        if type.conforms(to: UTType("net.daringfireball.markdown") ?? .plainText) { return .markdown }
+        return type.conforms(to: .html) ? .html : .plainText
+    }
+}
+
 /// Text shown by a standalone document window.
 @Observable final class DocumentModel {
     var text = ""
     /// Bumped when the text is replaced from disk (revert, external change).
     var revision = 0
-    var isMarkdown = true
+    var kind = DocumentKind.markdown
+    var isMarkdown: Bool { kind == .markdown }
+    var hasPreview: Bool { kind != .plainText }
+    /// HTML preview: run the page's scripts and load remote content (this window only, off by default).
+    var allowsActiveContent = false
     /// Set when the file's encoding couldn't be decoded faithfully; saving would corrupt it.
     var isReadOnly = false
     @ObservationIgnored weak var document: NSDocument?
@@ -115,7 +136,7 @@ final class TextFileDocument: NSDocument {
         MainActor.assumeIsolated {
             self.encoding = encoding
             model.isReadOnly = lossy
-            model.isMarkdown = Self.isMarkdown(typeName: typeName, url: fileURL)
+            model.kind = DocumentKind.detect(typeName: typeName, url: fileURL)
             model.text = text
             model.revision += 1
         }
@@ -156,16 +177,8 @@ final class TextFileDocument: NSDocument {
         super.close()
     }
 
-    nonisolated static func isMarkdown(typeName: String, url: URL?) -> Bool {
-        if let ext = url?.pathExtension.lowercased(), !ext.isEmpty {
-            return ["md", "markdown", "mdown", "mkd", "mdx"].contains(ext)
-        }
-        if typeName == "Markdown Document" { return true }
-        return UTType(typeName)?.conforms(to: UTType("net.daringfireball.markdown") ?? .plainText) ?? false
-    }
-
     override func makeWindowControllers() {
-        if let fileURL { model.isMarkdown = Self.isMarkdown(typeName: fileType ?? "", url: fileURL) }
+        if let fileURL { model.kind = DocumentKind.detect(typeName: fileType ?? "", url: fileURL) }
         let hosting = NSHostingController(rootView: DocumentEditorView(model: model))
         hosting.sceneBridgingOptions = [.toolbars]
         let window = NSWindow(contentViewController: hosting)
@@ -197,7 +210,7 @@ struct DocumentEditorView: View {
 
     var body: some View {
         Group {
-            if !model.isMarkdown {
+            if !model.hasPreview {
                 editor(sync: false)
             } else {
                 switch mode {
@@ -205,7 +218,8 @@ struct DocumentEditorView: View {
                 case .preview: preview
                 case .split:
                     HSplitView {
-                        editor(sync: true).frame(minWidth: 260, maxWidth: .infinity)
+                        // Scroll sync needs Markdown source positions; HTML previews scroll on their own.
+                        editor(sync: model.isMarkdown).frame(minWidth: 260, maxWidth: .infinity)
                         preview.frame(minWidth: 260, maxWidth: .infinity)
                     }
                 }
@@ -220,17 +234,28 @@ struct DocumentEditorView: View {
                     }
                 }
             }
-            if model.isMarkdown {
-                if isTemplate {
-                    ToolbarItem {
-                        Button {
-                            showTemplateForm = true
-                        } label: {
-                            Label("Use Template", systemImage: "wand.and.stars")
-                        }
-                        .help("Fill in the template parameters")
+            if isTemplate {
+                ToolbarItem {
+                    Button {
+                        showTemplateForm = true
+                    } label: {
+                        Label("Use Template", systemImage: "wand.and.stars")
                     }
+                    .help("Fill in the template parameters")
                 }
+            }
+            if model.kind == .html && mode != .edit {
+                ToolbarItem {
+                    Toggle(isOn: Bindable(model).allowsActiveContent) {
+                        Label("Scripts and Remote Content", systemImage: model.allowsActiveContent ? "lock.open" : "lock.shield")
+                    }
+                    .toggleStyle(.button)
+                    .help(model.allowsActiveContent
+                        ? "Scripts and remote content are on for this window. Click to block them again."
+                        : "The preview blocks this page's scripts and remote content. Click to allow them for this window.")
+                }
+            }
+            if model.hasPreview {
                 ToolbarItem {
                     Picker("Mode", selection: $mode) {
                         ForEach(EditorMode.allCases) { Label($0.title, systemImage: $0.symbol).tag($0) }
@@ -247,7 +272,7 @@ struct DocumentEditorView: View {
                         .help("This file's text encoding couldn't be read exactly, so editing is off to avoid damaging it")
                 }
             }
-            if !model.isMarkdown {
+            if !model.hasPreview {
                 ToolbarItem {
                     Label("Plain Text", systemImage: "doc.plaintext")
                         .labelStyle(.titleAndIcon)
@@ -284,7 +309,17 @@ struct DocumentEditorView: View {
         )
     }
 
-    private var preview: some View {
+    @ViewBuilder private var preview: some View {
+        if model.kind == .html {
+            HTMLPreview(html: model.text, directory: directory, allowsActiveContent: model.allowsActiveContent) { url in
+                WindowManager.shared.openFile(url)
+            }
+        } else {
+            markdownPreview
+        }
+    }
+
+    private var markdownPreview: some View {
         MarkdownPreview(
             markdown: model.text,
             baseDirectory: directory,
