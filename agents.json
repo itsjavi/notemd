@@ -16,6 +16,11 @@
       "canWrite": true,
       "canCommit": false
     },
+    "Gohan": {
+      "role": "App UI worker. Implements assigned SwiftUI/AppKit view and command tasks in its own worktree, verifies them in the Test/Dev builds, commits only to its own worktree branch and hands that branch to Goku for integration; updates its own backlog tasks.",
+      "canWrite": true,
+      "canCommit": false
+    },
     "Bulma": {
       "role": "Researcher and reviewer. Investigates unclear requirements, reviews diffs for bugs and security issues, and returns findings to Goku for recording.",
       "canWrite": false,
