@@ -61,8 +61,8 @@ And while I was at it, a proper editor for every other text file on my Mac. Good
   Split and Preview modes (⌘1, ⌘2, ⌘3).
 - **A text editor too.** Open any text file from Finder, whatever its extension. Markdown gets the editor and preview,
   HTML files a live preview of the page itself (scripts and remote content stay blocked until you allow them), and
-  everything else opens in plain-text mode. Line numbers and invisible characters (spaces, tabs, line breaks) are one
-  click away in the View menu. NoteMD appears under _Open With_ without becoming the default app.
+  everything else opens in plain-text mode. Find and replace in any note or file (⌘F, ⌥⌘F), and line numbers and invisible
+  characters (spaces, tabs, line breaks) are one click away in the View menu. NoteMD appears under _Open With_ without becoming the default app.
 - **Notes from anywhere.** Create notes from other apps through the Services menu, the Dock icon, drag and drop or
   paste.
 

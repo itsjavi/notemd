@@ -31,6 +31,8 @@ enum DocumentKind: Sendable {
     var hasPreview: Bool { kind != .plainText }
     /// HTML preview: run the page's scripts and load remote content (this window only, off by default).
     var allowsActiveContent = false
+    /// Bumped to bring the editor back from Preview mode (Edit > Find).
+    var editorRequest = 0
     /// Set when the file's encoding couldn't be decoded faithfully; saving would corrupt it.
     var isReadOnly = false
     @ObservationIgnored weak var document: NSDocument?
@@ -282,6 +284,7 @@ struct DocumentEditorView: View {
             }
         }
         .onChange(of: settings.editorMode) { _, newValue in mode = newValue }
+        .onChange(of: model.editorRequest) { if mode == .preview { mode = .split } }
         .sheet(isPresented: Binding(get: { model.transcribeSource != nil }, set: { if !$0 { model.transcribeSource = nil } })) {
             if let source = model.transcribeSource, let audio = Attachments.fileURL(forDestination: source, relativeTo: directory) {
                 TranscriptionSheet(audioURL: audio) { text in model.insertTranscript(text, forSource: source) }

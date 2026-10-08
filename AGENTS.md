@@ -274,6 +274,8 @@ note paths must be plain repository-relative paths.
   (paperclip popover), `ui/asset-unlink?note=&asset=`, `ui/asset-rename?path=&name=`, `ui/asset-delete?path=` and
   `ui/assets-cleanup` (as confirmed; `confirm=1` only shows the dialog), `ui/sheet?name=rename-asset&path=`
 - `ui/editor-command?name=tab|backtab|newline|text&text=&select=end|all[&target=document]`, `ui/settings`
+- `ui/find?action=show|show-replace|next|previous|replace|replace-all|replace-all-in-selection|hide&q=&with=[&target=document]`
+  (fills the find bar's fields; puts the shared find pasteboard back), `ui/editor-command?name=undo`
 - `ui/editor-option?name=line-numbers|invisibles&value=0|1`; `debug/editor-bench?out=[&target=document]` times typing
   and redraws in the open editor
 - `ui/sheet-key?index=&text=&key=return|cmd-return` (types into the index-th multi-line box of the open sheet, then

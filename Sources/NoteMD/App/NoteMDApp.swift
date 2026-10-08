@@ -143,12 +143,27 @@ struct NoteMDCommands: Commands {
             Divider()
         }
         CommandGroup(after: .textEditing) {
+            Menu("Find") {
+                Button("Find…") { EditorFind.perform(.showFindInterface) }
+                    .keyboardShortcut("f")
+                Button("Find and Replace…") { EditorFind.perform(.showReplaceInterface) }
+                    .keyboardShortcut("f", modifiers: [.command, .option])
+                Button("Find Next") { EditorFind.perform(.nextMatch) }
+                    .keyboardShortcut("g")
+                Button("Find Previous") { EditorFind.perform(.previousMatch) }
+                    .keyboardShortcut("g", modifiers: [.command, .shift])
+                Button("Use Selection for Find") { EditorFind.perform(.setSearchString) }
+                    .keyboardShortcut("e")
+                Button("Jump to Selection") { NSApp.sendAction(#selector(NSTextView.centerSelectionInVisibleArea(_:)), to: nil, from: nil) }
+                    .keyboardShortcut("j")
+            }
+            // ⇧⌘F, as "find in all files" elsewhere; ⌥⌘F is Find and Replace.
             Button("Search Notes") {
                 NSApp.keyWindow?.toolbar?.items.first { $0 is NSSearchToolbarItem }.map { item in
                     (item as? NSSearchToolbarItem)?.beginSearchInteraction()
                 }
             }
-            .keyboardShortcut("f", modifiers: [.command, .option])
+            .keyboardShortcut("f", modifiers: [.command, .shift])
         }
     }
 

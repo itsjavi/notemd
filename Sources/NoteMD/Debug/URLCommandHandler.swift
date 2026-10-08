@@ -169,6 +169,7 @@ enum DebugHooks {
             case "tab": textView.insertTab(nil)
             case "backtab": textView.insertBacktab(nil)
             case "newline": textView.insertNewline(nil)
+            case "undo": textView.undoManager?.undo()
             case "text": textView.insertText(query["text"] ?? "", replacementRange: textView.selectedRange())
             default: break
             }
@@ -213,6 +214,36 @@ enum DebugHooks {
             let recorder = query["target"] == "document" ? debugDocument?.model.voiceRecorder : store?.voiceRecorder
             recorder?.simulatedClip = { url in makeClip(at: url, from: source, query: query) }
             if query["target"] == "document" { debugDocument?.model.startVoiceNote() } else { store?.startVoiceNote() }
+        case "ui/find":
+            // Edit > Find on the repository window (or the first document with target=document). `q` and `with`
+            // fill the find bar's fields; the shared find pasteboard NSTextFinder writes is put back afterwards.
+            let window = query["target"] == "document"
+                ? NSDocumentController.shared.documents.first?.windowControllers.first?.window
+                : store.flatMap { s in windows.controllers.first { $0.store === s }?.window }
+            guard let window else { return }
+            let findPasteboard = NSPasteboard(name: .find)
+            let saved = findPasteboard.string(forType: .string)
+            let actions: [String: NSTextFinder.Action] = [
+                "show": .showFindInterface, "show-replace": .showReplaceInterface, "next": .nextMatch, "previous": .previousMatch,
+                "replace": .replace, "replace-all": .replaceAll, "replace-all-in-selection": .replaceAllInSelection, "hide": .hideFindInterface,
+            ]
+            Task {
+                if query["q"] != nil || query["with"] != nil {
+                    EditorFind.perform(query["with"] != nil ? .showReplaceInterface : .showFindInterface, in: window)
+                    try? await Task.sleep(for: .milliseconds(300))
+                    if let bar = EditorFind.editorTextView(in: window.contentView ?? NSView())?.enclosingScrollView?.findBarView {
+                        if let q = query["q"], let field = findBarFields(in: bar).search { setFieldText(field, q) }
+                        if let with = query["with"], let field = findBarFields(in: bar).replace { setFieldText(field, with) }
+                    }
+                    try? await Task.sleep(for: .milliseconds(300))
+                }
+                if let action = actions[query["action"] ?? ""] { EditorFind.perform(action, in: window) }
+                try? await Task.sleep(for: .milliseconds(500))
+                if let saved, findPasteboard.string(forType: .string) != saved {
+                    findPasteboard.clearContents()
+                    findPasteboard.setString(saved, forType: .string)
+                }
+            }
         case "ui/editor-option":
             // View > Show Line Numbers / Show Invisible Characters.
             let on = query["value"] == "1"
@@ -331,6 +362,42 @@ enum DebugHooks {
         return nil
     }
 
+    /// The find bar's non-editable labels (the match count).
+    private static func findBarLabels(in view: NSView) -> [String] {
+        var labels: [String] = []
+        func walk(_ view: NSView) {
+            if let field = view as? NSTextField, !field.isEditable, !field.stringValue.isEmpty { labels.append(field.stringValue) }
+            view.subviews.forEach(walk)
+        }
+        walk(view)
+        return labels
+    }
+
+    /// The find bar's search field and, when shown, its replace field.
+    private static func findBarFields(in view: NSView) -> (search: NSSearchField?, replace: NSTextField?) {
+        var search: NSSearchField?
+        var replace: NSTextField?
+        func walk(_ view: NSView) {
+            if let field = view as? NSSearchField, search == nil { search = field }
+            else if let field = view as? NSTextField, !(field is NSSearchField), field.isEditable, replace == nil { replace = field }
+            view.subviews.forEach(walk)
+        }
+        walk(view)
+        return (search, replace)
+    }
+
+    /// Types into a find bar field the way NSTextFinder notices (it listens for text changes).
+    private static func setFieldText(_ field: NSTextField, _ text: String) {
+        field.window?.makeFirstResponder(field)
+        if let editor = field.currentEditor() {
+            editor.selectAll(nil)
+            editor.insertText(text)
+        } else {
+            field.stringValue = text
+        }
+        _ = field.sendAction(field.action, to: field.target)
+    }
+
     /// Editable text views that aren't field editors (SwiftUI `TextEditor`s), in view order.
     private static func multilineTextViews(in view: NSView) -> [NSTextView] {
         if let textView = view as? NSTextView, textView.isEditable, !textView.isFieldEditor { return [textView] }
@@ -352,6 +419,8 @@ enum DebugHooks {
         lines.append("keyWindow: \(NSApp.keyWindow?.title ?? "-")")
         lines.append("repositories: \(windows.controllers.map { $0.store.displayPath })")
         lines.append("lineNumbers: \(AppSettings.shared.showLineNumbers)")
+        let findBars = NSApp.windows.compactMap { window in window.contentView.flatMap(EditorFind.editorTextView(in:))?.enclosingScrollView }
+        lines.append("findBar: \(findBars.map { scroll in scroll.isFindBarVisible ? "visible " + (scroll.findBarView.map(findBarLabels) ?? []).joined(separator: " / ") : "hidden" })")
         lines.append("invisibles: \(AppSettings.shared.showInvisibles)")
         lines.append("documents: \(NSDocumentController.shared.documents.compactMap { $0.fileURL?.path })")
         lines.append("documentKinds: \(NSDocumentController.shared.documents.compactMap { ($0 as? TextFileDocument).map { "\($0.model.kind)\($0.model.allowsActiveContent ? "+active" : "")" } })")
