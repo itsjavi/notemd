@@ -189,8 +189,14 @@ final class TextFileDocument: NSDocument {
         window.tabbingMode = .automatic
         window.setContentSize(NSSize(width: 980, height: 760))
         let controller = NSWindowController(window: window)
-        controller.shouldCascadeWindows = true
+        // The first document window reopens at the saved frame, or centred on first use (a window made from a
+        // view controller starts at the screen's corner); further windows cascade from it.
+        let othersOpen = NSDocumentController.shared.documents.contains { document in
+            document !== self && document.windowControllers.contains { $0.window?.isVisible == true }
+        }
+        controller.shouldCascadeWindows = othersOpen
         addWindowController(controller)
+        if !othersOpen && !window.setFrameUsingName("TextDocument") { window.center() }
         window.setFrameAutosaveName("TextDocument")
     }
 }
