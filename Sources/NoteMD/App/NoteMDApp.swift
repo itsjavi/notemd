@@ -32,8 +32,6 @@ struct NoteMDCommands: Commands {
             Button("New Folder…") { store?.beginCreateFolder() }
                 .keyboardShortcut("n", modifiers: [.command, .shift])
                 .disabled(store == nil)
-            Button("New Markdown File") { NSDocumentController.shared.newDocument(nil) }
-                .keyboardShortcut("n", modifiers: [.command, .option])
             Divider()
             Button("Open…") { windows.showOpenPanel() }
                 .keyboardShortcut("o")
@@ -41,32 +39,19 @@ struct NoteMDCommands: Commands {
                 .keyboardShortcut("o", modifiers: [.command, .shift])
             Button("New Notes Folder…") { windows.createRepository(replacing: nil) }
             Menu("Open Recent") {
-                Section("Notes Folders") {
-                    ForEach(settings.recentRepositories, id: \.self) { path in
-                        Button(path) { windows.openRepository(PathDisplay.expand(path)) }
-                    }
-                }
-                Section("Files") {
-                    ForEach(NSDocumentController.shared.recentDocumentURLs, id: \.self) { url in
-                        Button(PathDisplay.abbreviate(url)) { windows.openFile(url) }
-                    }
+                ForEach(settings.recentRepositories, id: \.self) { path in
+                    Button(path) { windows.openRepository(PathDisplay.expand(path)) }
                 }
                 Divider()
-                Button("Clear Menu") {
-                    settings.recentRepositories = []
-                    NSDocumentController.shared.clearRecentDocuments(nil)
-                }
+                Button("Clear Menu") { settings.recentRepositories = [] }
             }
         }
         CommandGroup(replacing: .saveItem) {
             Button("Save Version") {
-                if let store, NSApp.keyWindow?.windowController is RepositoryWindowController {
-                    Task { await store.saveVersionNow() }
-                } else {
-                    NSApp.sendAction(#selector(NSDocument.save(_:)), to: nil, from: nil)
-                }
+                if let store { Task { await store.saveVersionNow() } }
             }
             .keyboardShortcut("s")
+            .disabled(store == nil)
             Button("Rename Note…") {
                 if let store, let path = store.editor?.path { store.sheet = .renameNote(path: path) }
             }
@@ -110,14 +95,9 @@ struct NoteMDCommands: Commands {
             .keyboardShortcut("r", modifiers: [.command, .option])
             .disabled(store?.editor == nil)
             Divider()
-            Button("Record Voice Note") {
-                if let document = NSApp.keyWindow?.windowController?.document as? TextFileDocument {
-                    document.model.startVoiceNote()
-                } else {
-                    store?.startVoiceNote()
-                }
-            }
-            .keyboardShortcut("r", modifiers: [.command, .control])
+            Button("Record Voice Note") { store?.startVoiceNote() }
+                .keyboardShortcut("r", modifiers: [.command, .control])
+                .disabled(store == nil)
         }
         CommandMenu("Format") {
             formatButton("Bold", #selector(MarkdownTextView.toggleBold(_:)), "b")

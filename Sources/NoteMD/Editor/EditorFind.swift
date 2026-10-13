@@ -1,6 +1,6 @@
 import AppKit
 
-/// Edit > Find for the note and document editors. It drives the text view's own find bar (NSTextFinder), which brings
+/// Edit > Find for the note editor. It drives the text view's own find bar (NSTextFinder), which brings
 /// incremental highlighting, the match count, Replace / Replace All and undo.
 @MainActor enum EditorFind {
     static func perform(_ action: NSTextFinder.Action, in window: NSWindow? = NSApp.keyWindow) {
@@ -10,13 +10,8 @@ import AppKit
             return
         }
         // Preview mode hides the editor: show it next to the preview, then search it.
-        if let document = NSDocumentController.shared.document(for: window) as? TextFileDocument, document.model.hasPreview {
-            document.model.editorRequest += 1
-        } else if WindowManager.shared.controllers.contains(where: { $0.window === window && $0.store.editor != nil }) {
-            AppSettings.shared.editorMode = .split
-        } else {
-            return
-        }
+        guard WindowManager.shared.controllers.contains(where: { $0.window === window && $0.store.editor != nil }) else { return }
+        AppSettings.shared.editorMode = .split
         Task {
             // SwiftUI builds the editor on a later run loop pass.
             for _ in 0..<10 {

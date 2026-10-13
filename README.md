@@ -6,7 +6,7 @@
 
 <p align="center">
   <strong>Markdown notes, versioned automatically.</strong><br>
-  A native macOS app for plain Markdown files, with git history, prompt templates, voice notes and a text editor for everything else.
+  A native macOS app for plain Markdown files, with git history, prompt templates and voice notes.
 </p>
 
 <p align="center">
@@ -32,8 +32,6 @@ without having to think about it.
 
 I also kept rewriting the same AI prompts, so I added templates: put parameters in a note, fill in a form, copy the
 result. Voice notes and video reviews came next, because some thoughts are faster to say or show than to type.
-
-And while I was at it, a proper editor for every other text file on my Mac. Goodbye, TextEdit.
 
 ## Features
 
@@ -63,13 +61,13 @@ And while I was at it, a proper editor for every other text file on my Mac. Good
 - **Organize and find.** Folders with a color and an icon, tags in front matter (`tags:`), and search across titles,
   tags and text with `tag:name` / `#name` filters.
 - **GitHub Flavored Markdown.** Tables, task lists, footnotes, alerts and autolinks, rendered by cmark-gfm, with Editor,
-  Split and Preview modes (⌘1, ⌘2, ⌘3).
-- **A text editor too.** Open any text file from Finder, whatever its extension. Markdown gets the editor and preview,
-  HTML files a live preview of the page itself (scripts and remote content stay blocked until you allow them), and
-  everything else opens in plain-text mode. Find and replace in any note or file (⌘F, ⌥⌘F), and line numbers and invisible
-  characters (spaces, tabs, line breaks) are one click away in the View menu. NoteMD appears under _Open With_ without becoming the default app.
-- **Notes from anywhere.** Create notes from other apps through the Services menu, the Dock icon, drag and drop or
-  paste.
+  Split and Preview modes (⌘1, ⌘2, ⌘3). Find and replace in any note (⌘F, ⌥⌘F), and line numbers and invisible
+  characters (spaces, tabs, line breaks) are one click away in the View menu.
+- **Bring Markdown files in.** Open a `.md` file from Finder, drop it on the Dock icon or send it from the Share menu,
+  and NoteMD copies or moves it into the vault you pick. A file that's already in one of your vaults opens there. NoteMD
+  appears under _Open With_ for Markdown files only, without becoming the default app.
+- **Notes from anywhere.** Create notes from other apps through the Share menu, the Services menu, the Dock icon, drag
+  and drop or paste: text and links become the note, images, recordings and PDFs are attached to it.
 
 <table>
   <tr>
@@ -105,7 +103,10 @@ cd notemd
 make install  # builds build/NoteMD.app and copies it to /Applications
 ```
 
-Other targets: `make app` (release build only), `make run` (debug build), `make test` (unit tests).
+Other targets: `make app` (release build only), `make run` (debug build), `make test` (unit tests),
+`make build-notarized` (signed and notarized app, zip and DMG in `build/release`; needs a Developer ID Application
+identity and a `notarytool` Keychain profile) and `make install-notarized` (installs that build). The Share menu lists
+NoteMD once the release build is in `/Applications`.
 
 See [AGENTS.md](AGENTS.md) for the project layout, build variants and test hooks. The website lives in [`web/`](web) and
 is deployed to GitHub Pages on every push to `main` that touches it.

@@ -91,9 +91,9 @@ struct NoteEditorPane: View {
             accessRoot: store.rootURL,
             scrollLine: settings.editorMode == .split ? scrollLine : nil,
             onOpenNote: { url in
-                // Absolute links can point outside the repository: open those as documents.
+                // Absolute links can point outside the repository: show those in their own notes folder or Finder.
                 guard url.canonical.path.hasPrefix(store.contentURL.canonical.path + "/") else {
-                    WindowManager.shared.openFile(url)
+                    if !WindowManager.shared.showExistingNote(url) { NSWorkspace.shared.activateFileViewerSelecting([url]) }
                     return
                 }
                 let path = store.relativePath(of: url)

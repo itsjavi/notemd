@@ -29,6 +29,13 @@ let package = Package(
             path: "Sources/NoteMD",
             swiftSettings: [.defaultIsolation(MainActor.self)]
         ),
+        // Share menu extension, assembled into Contents/PlugIns/NoteMDShare.appex by build-app.sh.
+        .executableTarget(
+            name: "NoteMDShare",
+            path: "Sources/NoteMDShare",
+            swiftSettings: [.unsafeFlags(["-application-extension"])],
+            linkerSettings: [.unsafeFlags(["-application-extension", "-Xlinker", "-e", "-Xlinker", "_NSExtensionMain"])]
+        ),
         .testTarget(
             name: "NoteMDCoreTests",
             dependencies: ["NoteMDCore"],

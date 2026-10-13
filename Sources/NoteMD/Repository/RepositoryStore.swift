@@ -102,6 +102,8 @@ enum GitState: Equatable {
     var incognitoNotePendingDelete: String?
     private(set) var tags: [TagCount] = []
     private(set) var isLoaded = false
+    /// Work waiting for the first scan, when the layout is settled and the notes are known.
+    @ObservationIgnored private var afterLoad: [() -> Void] = []
     private(set) var visibleNotes: [NoteRow] = []
     private(set) var deletedFiles: [GitDeletedFile] = []
 
@@ -279,6 +281,14 @@ enum GitState: Equatable {
         if case .folder(let path) = sidebarSelection, root.find(path) == nil { sidebarSelection = .allNotes }
         refreshVisibleNotes()
         reconcileOpenNote()
+        let waiting = afterLoad
+        afterLoad = []
+        waiting.forEach { $0() }
+    }
+
+    /// Runs `action` now if the notes are loaded, otherwise right after the first scan.
+    func whenLoaded(_ action: @escaping () -> Void) {
+        if isLoaded { action() } else { afterLoad.append(action) }
     }
 
     private func filesChanged(_ paths: [String]) {
@@ -1224,6 +1234,40 @@ enum GitState: Equatable {
             guard let link = importer.markdown(forFiles: [file], mode: .copy) else { continue }
             let name = file.deletingPathExtension().lastPathComponent
             createNote(in: "", title: name, body: "# \(name)\n\n\(link)\n")
+        }
+    }
+
+    /// Copies or moves Markdown files from outside into the top of the notes folder, then selects the first one.
+    func importNotes(_ files: [URL], move: Bool) {
+        whenLoaded { [self] in
+            var imported: [String] = []
+            var failed: [String] = []
+            for file in files {
+                do {
+                    let target = try NoteImport.importFile(file, into: contentURL, move: move)
+                    let path = relativePath(of: target)
+                    _ = scanSingle(path)
+                    imported.append(path)
+                } catch {
+                    failed.append("“\(file.lastPathComponent)”: \(error.localizedDescription)")
+                }
+            }
+            if !failed.isEmpty { errorMessage = "Couldn't \(move ? "move" : "copy") " + failed.joined(separator: "\n") }
+            guard let first = imported.first else { return }
+            autoCommitter?.markDirty()
+            updatePendingState()
+            selectNote(first)
+        }
+    }
+
+    /// Shows a note in All Notes and opens it, once the notes are loaded.
+    func selectNote(_ path: String) {
+        whenLoaded { [self] in
+            guard note(at: path) != nil else { return }
+            searchText = ""
+            sidebarSelection = .allNotes
+            refreshVisibleNotes()
+            selectedNoteID = path
         }
     }
 

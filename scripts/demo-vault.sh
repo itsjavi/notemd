@@ -3,7 +3,6 @@
 # Usage: scripts/demo-vault.sh [dir] [clip-frame-image]
 #   dir              defaults to /private/tmp/notemd-demo (Test-build hooks only accept temp folders);
 #                    creates <dir>/Notes (the vault, with git history and its notes in files/, decision-8)
-#                    and <dir>/files/Scratch pad.txt
 #   clip-frame-image still used for the vault's demo screen recording (default: web/assets/screenshot-dark.webp)
 # Extend it when a new feature needs demo content, so screenshots stay reproducible.
 set -euo pipefail
@@ -11,7 +10,7 @@ ROOT="$(cd "$(dirname "$0")/.." && pwd)"
 DIR="${1:-/private/tmp/notemd-demo}"
 FRAME="${2:-$ROOT/web/assets/screenshot-dark.webp}"
 R="$DIR/Notes"
-rm -rf "$R" "$DIR/files"; mkdir -p "$R"/files/{Work,Personal,Journal,Prompts,assets} "$DIR/files"
+rm -rf "$R" "$DIR/files"; mkdir -p "$R"/files/{Work,Personal,Journal,Prompts,assets}
 cd "$R"
 git init -q -b main
 git config user.name "Ana Rivera"; git config user.email "ana@example.com"
@@ -234,20 +233,4 @@ touch -t 202610070815 "Journal/Onboarding idea.md"
 touch -t 202610070820 "Work/Onboarding review.md"
 touch -t 202610071130 "Work/Q4 Roadmap.md"
 
-# A loose text file for the standalone editor shot ("Goodbye, TextEdit").
-cat > "$DIR/files/Scratch pad.txt" <<'EOF'
-Scratch pad
-
-Call the plumber on Thursday at 9:00
-Guest Wi-Fi password is on the fridge
-Flight LIS → BER, seat 14A
-
-Gift ideas
-- a good chef's knife for Sam
-- the new Murakami for Leo
-
-Shell one-liners
-  git log --oneline --since="1 week ago"
-  du -sh * | sort -h
-EOF
-echo "Demo vault: $R ($(git log --oneline | wc -l | tr -d ' ') commits); text file: $DIR/files/Scratch pad.txt"
+echo "Demo vault: $R ($(git log --oneline | wc -l | tr -d ' ') commits)"

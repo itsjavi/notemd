@@ -2,15 +2,13 @@ import AppKit
 
 final class AppDelegate: NSObject, NSApplicationDelegate {
     private var launchFinished = false
+    /// Files or URLs launched the app (Finder, Dock, Share menu): no welcome window then.
     private var openedAtLaunch = false
-    /// A standalone file launched the app (Finder, Dock drop, Open With): show only that file.
-    private var openedDocumentAtLaunch = false
+    /// Files from the launch's open-documents event, opened once the notes folders are restored.
+    private var launchFiles: [URL] = []
 
     func applicationWillFinishLaunching(_ notification: Notification) {
-        // Create the shared document controller before any open events arrive.
-        _ = NSDocumentController.shared
-        // Under the SwiftUI lifecycle, Finder/Dock file opens bypass application(_:open:) and go straight
-        // to NSDocumentController, which can't open folders or route notes to their repository window.
+        // Under the SwiftUI lifecycle, Finder/Dock file opens bypass application(_:open:): route them ourselves.
         NSAppleEventManager.shared().setEventHandler(
             self, andSelector: #selector(handleOpenDocuments(_:withReplyEvent:)),
             forEventClass: AEEventClass(kCoreEventClass), andEventID: AEEventID(kAEOpenDocuments))
@@ -21,12 +19,13 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
         launchFinished = true
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
-        // The open-documents event of a launch arrives before this point.
-        if !openedDocumentAtLaunch { WindowManager.shared.restoreRepositories() }
+        // The open-documents event of a launch arrives before this point, URL events after it.
+        WindowManager.shared.restoreRepositories()
+        WindowManager.shared.open(launchFiles)
+        launchFiles = []
         DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
             MainActor.assumeIsolated {
-                let hasWindows = WindowManager.shared.hasRepositoryWindows || !NSDocumentController.shared.documents.isEmpty
-                if !hasWindows && !self.openedAtLaunch { WindowManager.shared.showWelcome() }
+                if !WindowManager.shared.hasRepositoryWindows && !self.openedAtLaunch { WindowManager.shared.showWelcome() }
             }
         }
     }
@@ -47,21 +46,15 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func application(_ application: NSApplication, open urls: [URL]) {
         openedAtLaunch = true
-        for url in urls {
-            if url.isFileURL {
-                let outcome = WindowManager.shared.openFile(url)
-                if !launchFinished && outcome == .document { openedDocumentAtLaunch = true }
-            } else if url.scheme == AppVariant.urlScheme {
-                URLCommandHandler.handle(url)
-            }
-        }
+        let files = urls.filter(\.isFileURL)
+        if launchFinished { WindowManager.shared.open(files) } else { launchFiles += files }
+        for url in urls where url.scheme == AppVariant.urlScheme { URLCommandHandler.handle(url) }
     }
 
-    func applicationShouldOpenUntitledFile(_ sender: NSApplication) -> Bool { false }
-
     func applicationShouldHandleReopen(_ sender: NSApplication, hasVisibleWindows flag: Bool) -> Bool {
-        if !flag && !WindowManager.shared.hasRepositoryWindows {
-            WindowManager.shared.showWelcome()
+        let windows = WindowManager.shared
+        if !flag && !windows.hasRepositoryWindows {
+            if !(AppSettings.shared.alwaysOpenLastRepository && windows.openLastRepository()) { windows.showWelcome() }
         }
         return true
     }

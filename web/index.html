@@ -6,7 +6,7 @@
     <title>NoteMD: Markdown notes, versioned automatically</title>
     <meta
       name="description"
-      content="A native macOS app for plain Markdown notes: multiple vaults, automatic git history, reusable prompt templates, voice notes and a fast standalone text editor. Free and open source."
+      content="A native macOS app for plain Markdown notes: multiple vaults, automatic git history, reusable prompt templates and voice notes. Free and open source."
     />
     <link rel="canonical" href="https://itsjavi.com/notemd/" />
     <meta name="color-scheme" content="light dark" />
@@ -22,7 +22,7 @@
     <meta property="og:title" content="NoteMD: Markdown notes, versioned automatically" />
     <meta
       property="og:description"
-      content="A native Mac app for plain Markdown files: multiple vaults, a git history of every edit, reusable prompt templates, voice notes and a text editor. Free and open source."
+      content="A native Mac app for plain Markdown files: multiple vaults, a git history of every edit, reusable prompt templates and voice notes. Free and open source."
     />
     <meta property="og:image" content="https://itsjavi.com/notemd/assets/og-image.jpg" />
     <meta property="og:image:type" content="image/jpeg" />
@@ -36,7 +36,7 @@
     <meta name="twitter:title" content="NoteMD: Markdown notes, versioned automatically" />
     <meta
       name="twitter:description"
-      content="Plain Markdown files, multiple vaults, automatic git history, prompt templates, voice notes and a text editor for macOS. Free and open source."
+      content="Plain Markdown files, multiple vaults, automatic git history, prompt templates and voice notes for macOS. Free and open source."
     />
     <meta name="twitter:image" content="https://itsjavi.com/notemd/assets/og-image.jpg" />
     <meta
@@ -51,7 +51,7 @@
         "name": "NoteMD",
         "applicationCategory": "ProductivityApplication",
         "operatingSystem": "macOS 26",
-        "description": "A native macOS note-taking app and text editor for plain Markdown files, with automatic git versioning.",
+        "description": "A native macOS note-taking app for plain Markdown files, with automatic git versioning.",
         "url": "https://itsjavi.com/notemd/",
         "license": "https://opensource.org/licenses/MIT",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
@@ -106,7 +106,7 @@
           <p class="lead">
             NoteMD is a native Mac app for plain Markdown files. Keep as many vaults as you like,
             get a git history of every edit for free, turn notes into reusable prompt templates,
-            record voice notes, and edit any text file on your Mac.
+            record voice notes, and send Markdown files in from Finder or the Share menu.
           </p>
           <div class="actions">
             <a class="button button-primary" href="https://github.com/itsjavi/notemd"
@@ -183,17 +183,13 @@
                 put parameters in a note, fill in a form, copy the result. Voice notes and video
                 reviews came next, because some thoughts are faster to say or show than to type.
               </p>
-              <p>
-                And while I was at it, a proper editor for every other text file on my Mac. Goodbye,
-                TextEdit.
-              </p>
               <ul class="tasks">
                 <li>Plain Markdown files, no lock-in</li>
                 <li>Multiple vaults, one window each</li>
                 <li>Automatic git history</li>
                 <li>Reusable prompt templates</li>
                 <li>Voice notes and video reviews</li>
-                <li>A text editor for everything else</li>
+                <li>Notes from Finder and the Share menu</li>
               </ul>
               <p class="signature">Javi, author of NoteMD</p>
             </div>
@@ -311,33 +307,6 @@
               />
             </a>
           </div>
-
-          <div class="feature">
-            <div class="feature-copy">
-              <h3>Goodbye, TextEdit</h3>
-              <p>
-                Open any text file from Finder: <code>.md</code>, <code>.txt</code>,
-                <code>.env.example</code>, code or config, whatever the extension. Markdown gets the
-                editor and live preview, HTML a live preview of the page with its scripts and remote
-                content blocked until you allow them, and everything else opens as plain text. Find
-                and replace with ⌘F and ⌥⌘F, and turn on line numbers and invisible characters from
-                the View menu.
-              </p>
-              <p>
-                NoteMD shows up under <em>Open With</em> without taking over your default apps, and
-                indents with tabs or spaces, as you prefer.
-              </p>
-            </div>
-            <a class="feature-shot feature-shot-fade" data-lightbox href="assets/text-editor.webp">
-              <img
-                src="assets/text-editor.webp"
-                width="1600"
-                height="817"
-                loading="lazy"
-                alt="A plain text file open in NoteMD's standalone editor with a monospaced font."
-              />
-            </a>
-          </div>
         </div>
       </section>
 
@@ -372,14 +341,15 @@
               <h3>Editor, Split, Preview</h3>
               <p>
                 Write, read, or both side by side. Switch with <kbd>⌘1</kbd>, <kbd>⌘2</kbd> and
-                <kbd>⌘3</kbd>.
+                <kbd>⌘3</kbd>, and find and replace with <kbd>⌘F</kbd> and <kbd>⌥⌘F</kbd>.
               </p>
             </li>
             <li>
               <h3>Notes from anywhere</h3>
               <p>
-                Send text and files from other apps through the Services menu, the Dock icon, drag
-                and drop, or paste.
+                Send text, links and files from other apps through the Share menu, the Services
+                menu, drag and drop, or paste. Markdown files from Finder are copied or moved into
+                the vault you pick.
               </p>
             </li>
             <li>

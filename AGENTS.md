@@ -196,7 +196,8 @@ before comitting if you are only the agent running.
 
 ## NoteMD project
 
-Native macOS 26 note-taking app and standalone Markdown/text editor (SwiftUI + AppKit, Swift 6, SwiftPM).
+Native macOS 26 note-taking app for Markdown notes in git-versioned vaults (SwiftUI + AppKit, Swift 6, SwiftPM).
+There is no standalone editor: opened Markdown files are copied or moved into a vault (decision-9).
 Decisions live in `backlog/decisions/` (platform, storage format, git versioning, rendering).
 
 ### Commands
@@ -209,26 +210,29 @@ Decisions live in `backlog/decisions/` (platform, storage format, git versioning
 | `make dev` / `make run`           | Debug `build/NoteMD Dev.app` (own bundle id and defaults)                |
 | `make test-app` / `make run-test` | Background agent build `build/NoteMD Test.app`                           |
 | `make install`                    | Quits the installed copy and installs the release build to /Applications |
+| `make build-notarized`            | Developer ID signed and notarized app, zip and DMG in `build/release`    |
+| `make install-notarized`          | Like `make install`, with the notarized build                            |
 | `make icon`                       | Redraws `Resources/AppIcon.icon` from `scripts/make-icon.swift`          |
 
 ### Layout
 
-| Path                                                                                        | Contents                                                                                          |
-| ------------------------------------------------------------------------------------------- | ------------------------------------------------------------------------------------------------- |
-| `Sources/NoteMDCore/Notes`                                                                  | Front matter (Yams, raw-entry preserving), notes, folders + `.notemd.json`, scanner, search       |
-| `Sources/NoteMDCore/Templates`                                                              | Template parameters and the `{{…}}` renderer                                                      |
-| `Sources/NoteMDCore/Markdown`                                                               | cmark-gfm HTML rendering (GFM extensions, alerts, front matter table)                             |
-| `Sources/NoteMDCore/Git`, `Diff`                                                            | git subprocess client, auto-committer, commit messages, line diff                                 |
-| `Sources/NoteMD/App`                                                                        | App entry, delegate, window manager, settings, variants                                           |
-| `Sources/NoteMD/Repository`                                                                 | Per-window `RepositoryStore`, open-note `NoteEditor`, FSEvents watcher                            |
-| `Sources/NoteMD/Views`, `Editor`, `Preview`, `Folders`, `Templates`, `History`, `Documents` | UI                                                                                                |
-| `Sources/NoteMD/Attachments`, `Voice`                                                       | Drop/paste importer (assets/ copy or link), voice recorder, on-device transcription               |
-| `Sources/NoteMD/Debug`                                                                      | URL scheme handler; DEBUG-only test hooks                                                         |
-| `Resources/`                                                                                | Info.plist, privacy manifest, `AppIcon.icon`                                                      |
-| `scripts/`                                                                                  | `build-app.sh`, `make-icon.swift`, `window-screenshot.swift`, `demo-vault.sh`, `og-image.html`    |
-| `web/`, `.github/workflows/pages.yml`                                                       | Website (https://itsjavi.com/notemd/) and its GitHub Pages deployment                             |
-| `brand/`                                                                                    | Screenshot/social-card recipes (`brand/README.md`) and the generated intro video (`intro-video/`) |
-| `skills/create-reusable-prompt/`                                                            | Agent skill for writing template notes, and the front matter JSON Schema (keep in sync with Core) |
+| Path                                                                           | Contents                                                                                                     |
+| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
+| `Sources/NoteMDCore/Notes`                                                     | Front matter (Yams, raw-entry preserving), notes, folders + `.notemd.json`, scanner, search                  |
+| `Sources/NoteMDCore/Templates`                                                 | Template parameters and the `{{…}}` renderer                                                                 |
+| `Sources/NoteMDCore/Markdown`                                                  | cmark-gfm HTML rendering (GFM extensions, alerts, front matter table)                                        |
+| `Sources/NoteMDCore/Git`, `Diff`                                               | git subprocess client, auto-committer, commit messages, line diff                                            |
+| `Sources/NoteMD/App`                                                           | App entry, delegate, window manager, settings, variants                                                      |
+| `Sources/NoteMD/Repository`                                                    | Per-window `RepositoryStore`, open-note `NoteEditor`, FSEvents watcher                                       |
+| `Sources/NoteMD/Views`, `Editor`, `Preview`, `Folders`, `Templates`, `History` | UI                                                                                                           |
+| `Sources/NoteMDShare`, `Resources/Share`                                       | Share menu extension (sandboxed `.appex`, release build only unless `SHARE=1`)                               |
+| `Sources/NoteMD/Attachments`, `Voice`                                          | Drop/paste importer (assets/ copy or link), voice recorder, on-device transcription                          |
+| `Sources/NoteMD/Debug`                                                         | URL scheme handler; DEBUG-only test hooks                                                                    |
+| `Resources/`                                                                   | Info.plist, privacy manifest, `AppIcon.icon`                                                                 |
+| `scripts/`                                                                     | `build-app.sh`, `release.sh`, `make-icon.swift`, `window-screenshot.swift`, `demo-vault.sh`, `og-image.html` |
+| `web/`, `.github/workflows/pages.yml`                                          | Website (https://itsjavi.com/notemd/) and its GitHub Pages deployment                                        |
+| `brand/`                                                                       | Screenshot/social-card recipes (`brand/README.md`) and the generated intro video (`intro-video/`)            |
+| `skills/create-reusable-prompt/`                                               | Agent skill for writing template notes, and the front matter JSON Schema (keep in sync with Core)            |
 
 ### Public docs, website and intro video
 
@@ -266,6 +270,9 @@ note paths must be plain paths relative to the repository's `files/` folder (dec
 for incognito notes. `debug/state` reports the `layout:` (`files` or `root`) and the `incognito:` notes.
 
 - `ui/create-repo?path=` (seeds example notes), `ui/open-repo?path=`, `ui/open-file?path=`, `ui/welcome`
+- `ui/import?action=copy|move|cancel[&dest=]` answers the import alert an opened Markdown file raises (`pendingImport:`
+  in `debug/state`); `ui/share?files=a,b&text=` fills the share pasteboard, then `notemd-test://share` (a verb every build
+  accepts) picks it up as the Share menu extension does; `ui/always-open-last?value=0|1`
 - `ui/sidebar-section?name=folders|tags&expanded=0|1` (collapses the sidebar section, as its header does)
 - `ui/sidebar?item=all|templates|incognito|deleted` or `folder=`/`tag=`, `ui/select?note=`, `ui/search?q=`, `ui/mode?value=edit|split|preview`
 - `ui/new-note?title=&body=[&incognito=1]`, `ui/delete-incognito?note=` (as confirmed; `ui/trash` only asks),
@@ -277,24 +284,24 @@ for incognito notes. `debug/state` reports the `layout:` (`files` or `root`) and
 - `ui/sidebar?item=assets`, `ui/asset-filter?value=all|unused|missing`, `ui/asset-select?path=`, `ui/attachments?note=`
   (paperclip popover), `ui/asset-unlink?note=&asset=`, `ui/asset-rename?path=&name=`, `ui/asset-delete?path=` and
   `ui/assets-cleanup` (as confirmed; `confirm=1` only shows the dialog), `ui/sheet?name=rename-asset&path=`
-- `ui/editor-command?name=tab|backtab|newline|text&text=&select=end|all[&target=document]`, `ui/settings`
-- `ui/find?action=show|show-replace|next|previous|replace|replace-all|replace-all-in-selection|hide&q=&with=[&target=document]`
+- `ui/editor-command?name=tab|backtab|newline|text&text=&select=end|all`, `ui/settings`
+- `ui/find?action=show|show-replace|next|previous|replace|replace-all|replace-all-in-selection|hide&q=&with=`
   (fills the find bar's fields; puts the shared find pasteboard back), `ui/editor-command?name=undo`
-- `ui/editor-option?name=line-numbers|invisibles&value=0|1`; `debug/editor-bench?out=[&target=document]` times typing
+- `ui/editor-option?name=line-numbers|invisibles&value=0|1`; `debug/editor-bench?out=` times typing
   and redraws in the open editor
 - `ui/sheet-key?index=&text=&key=return|cmd-return` (types into the index-th multi-line box of the open sheet, then
   routes the key like AppKit: default buttons first). Avoid it in the Use Template form, where a stray Return copies.
 - `ui/attachment-mode?value=ask|copy|link`, `ui/drop-files?paths=a,b`, `ui/paste-file?path=`, `ui/paste-image?path=`
-  (absolute temp paths; `select=end`, `target=document`), `ui/service-note?text=&file=`, `ui/lfs-check`
+  (absolute temp paths; `select=end`), `ui/service-note?text=&file=`, `ui/lfs-check`
 - `ui/voice-start?from=<clip>|seconds=` (recorder with the microphone replaced by that clip), `ui/voice-stop`, `ui/voice-cancel`,
   `ui/transcribe?src=<link destination>&lang=en-US`, `ui/sheet?name=transcribe|recorder&src=`
 - `ui/commit-now`, `ui/restore?path=&rev=`, `ui/window-size?w=&h=`, `ui/appearance?value=dark|light`
-- `ui/document-active-content?value=0|1` (the HTML preview's Scripts and Remote Content toggle, first document)
-- `debug/state?out=/private/tmp/state.txt` writes a `key: value` state dump
+- `debug/state?out=/private/tmp/state.txt` writes a `key: value` state dump (`windowFrames:` gives window and screen frames)
 
 Capture windows without activating the app: `swift scripts/window-screenshot.swift "NoteMD Test" /private/tmp/shot`.
 An open sheet blocks quitting (standard AppKit): close sheets before `quit`, or `pkill` the Test build.
-Real clicks, drags, Finder "Open With" and menu shortcuts still need a human check in the Dev build.
+Real clicks, drags, Finder "Open With", the Share menu (release build in `/Applications`) and menu shortcuts still need a
+human check.
 
 ### Never take over the user's Mac
 

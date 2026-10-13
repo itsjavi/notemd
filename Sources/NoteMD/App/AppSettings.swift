@@ -100,6 +100,8 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
     var recentRepositories: [String] { didSet { defaults.set(recentRepositories, forKey: Keys.recentRepositories) } }
     /// Repositories open at quit, reopened at launch.
     var openRepositories: [String] { didSet { defaults.set(openRepositories, forKey: Keys.openRepositories) } }
+    /// Open the most recent notes folder instead of the welcome window (launch, Dock click with no windows).
+    var alwaysOpenLastRepository: Bool { didSet { defaults.set(alwaysOpenLastRepository, forKey: Keys.alwaysOpenLastRepository) } }
     var attachmentImportMode: AttachmentImportMode { didSet { defaults.set(attachmentImportMode.rawValue, forKey: Keys.attachmentImportMode) } }
     /// Locale identifier preselected for transcriptions; empty means the system language.
     var transcriptionLanguage: String { didSet { defaults.set(transcriptionLanguage, forKey: Keys.transcriptionLanguage) } }
@@ -121,6 +123,7 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
         static let loadRemoteImages = "loadRemoteImages"
         static let recentRepositories = "recentRepositories"
         static let openRepositories = "openRepositories"
+        static let alwaysOpenLastRepository = "alwaysOpenLastRepository"
         static let attachmentImportMode = "attachmentImportMode"
         static let transcriptionLanguage = "transcriptionLanguage"
     }
@@ -160,6 +163,7 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
         loadRemoteImages = defaults.bool(forKey: Keys.loadRemoteImages)
         recentRepositories = defaults.stringArray(forKey: Keys.recentRepositories) ?? []
         openRepositories = defaults.stringArray(forKey: Keys.openRepositories) ?? []
+        alwaysOpenLastRepository = defaults.bool(forKey: Keys.alwaysOpenLastRepository)
         attachmentImportMode = AttachmentImportMode(rawValue: defaults.string(forKey: Keys.attachmentImportMode) ?? "") ?? .ask
         transcriptionLanguage = defaults.string(forKey: Keys.transcriptionLanguage) ?? ""
     }
@@ -178,9 +182,9 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
 
     // MARK: Fonts
 
-    func editorFont(monospacedOverride: Bool = false) -> NSFont {
+    func editorFont() -> NSFont {
         let size = CGFloat(editorFontSize)
-        if monospacedOverride || editorFontStyle == .monospaced {
+        if editorFontStyle == .monospaced {
             return .monospacedSystemFont(ofSize: size, weight: .regular)
         }
         if editorFontStyle == .serif, let descriptor = NSFont.systemFont(ofSize: size).fontDescriptor.withDesign(.serif) {

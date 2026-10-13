@@ -2,6 +2,7 @@ import AppKit
 import NoteMDCore
 import Observation
 import SwiftUI
+import UniformTypeIdentifiers
 
 /// Owns repository windows and the welcome window.
 @Observable final class WindowManager {
@@ -98,39 +99,102 @@ import SwiftUI
         if let store { switchRepository(of: store, to: url) } else { openRepository(url) }
     }
 
-    enum OpenOutcome {
-        case repository, note, document, attachment, failed
-    }
-
-    /// Opens a file: folders as repositories, notes inside an open repository are selected there, text files
-    /// open as documents, and anything else becomes a new note embedding it in the most recent repository.
-    @discardableResult
-    func openFile(_ url: URL) -> OpenOutcome {
-        let url = url.canonical
-        var isDirectory: ObjCBool = false
-        if FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory), isDirectory.boolValue {
-            openRepository(url)
-            return .repository
-        }
-        if NoteMDCore.noteExtensions.contains(url.pathExtension.lowercased()),
-           let controller = controllers.first(where: { url.path.hasPrefix($0.store.contentURL.canonical.path + "/") }) {
-            let store = controller.store
-            let path = store.relativePath(of: url)
-            if !path.split(separator: "/").contains(where: { $0.hasPrefix(".") }) {
-                store.sidebarSelection = .allNotes
-                store.selectedNoteID = path
-                present(controller.window)
-                return .note
+    /// Opens files from Finder, the Dock or Open…: folders as notes folders, Markdown files in the notes folder that
+    /// has them or imported into one, and anything else as a new note embedding it.
+    func open(_ urls: [URL]) {
+        var markdown: [URL] = []
+        var others: [URL] = []
+        for url in urls.map(\.canonical) {
+            var isDirectory: ObjCBool = false
+            guard FileManager.default.fileExists(atPath: url.path, isDirectory: &isDirectory) else { continue }
+            if isDirectory.boolValue {
+                openRepository(url)
+            } else if NoteImport.isMarkdown(url) {
+                if !showExistingNote(url) { markdown.append(url) }
+            } else {
+                others.append(url)
             }
         }
-        if FileManager.default.fileExists(atPath: url.path), !TextDetection.isText(at: url) {
-            return addToNotes([url]) ? .attachment : .failed
+        if !others.isEmpty { addToNotes(others) }
+        if !markdown.isEmpty { requestImport(markdown) }
+    }
+
+    /// Shows a Markdown file that is already a note: in its open window, or by opening its recent notes folder.
+    @discardableResult
+    func showExistingNote(_ url: URL) -> Bool {
+        let url = url.canonical
+        if let controller = controllers.first(where: { url.path.hasPrefix($0.store.contentURL.canonical.path + "/") }) {
+            controller.store.selectNote(controller.store.relativePath(of: url))
+            present(controller.window)
+            return true
         }
-        NSDocumentController.shared.openDocument(withContentsOf: url, display: true) { _, _, error in
-            if let error { MainActor.assumeIsolated { _ = NSApp.presentError(error) } }
+        let recent = AppSettings.shared.recentRepositories.map(PathDisplay.expand).first {
+            url.path.hasPrefix($0.canonical.path + "/") && FileManager.default.fileExists(atPath: $0.path)
         }
-        closeWelcome()
-        return .document
+        guard let recent else { return false }
+        openRepository(recent)
+        guard let store = controllers.first(where: { $0.store.rootURL == recent.canonical })?.store else { return false }
+        // The notes folder's layout is only settled once it has loaded.
+        store.whenLoaded { store.selectNote(store.relativePath(of: url)) }
+        return true
+    }
+
+    // MARK: Importing Markdown files
+
+    /// Markdown files waiting for the import confirmation. Background (Test) builds never show the alert; the
+    /// `ui/import` hook answers it instead.
+    @ObservationIgnored var pendingImport: [URL] = []
+
+    /// Notes folders an imported file can go to: the active window's, other open ones, then recent ones.
+    func importDestinations() -> [URL] {
+        let open = ([activeStore].compactMap(\.self) + controllers.map(\.store)).map(\.rootURL)
+        let recent = AppSettings.shared.recentRepositories.map(PathDisplay.expand).filter { FileManager.default.fileExists(atPath: $0.path) }
+        var seen = Set<String>()
+        return (open + recent).filter { seen.insert($0.canonical.path).inserted }
+    }
+
+    /// Asks which notes folder the Markdown files go to, and whether to copy or move them there.
+    func requestImport(_ files: [URL]) {
+        let destinations = importDestinations()
+        guard !destinations.isEmpty else {
+            presentError("Create or open a notes folder first, then open “\(files[0].lastPathComponent)” again to add it.")
+            showWelcome()
+            return
+        }
+        if AppVariant.isBackground {
+            pendingImport = files
+            return
+        }
+        // Out of the open-documents event: the alert runs its own modal loop.
+        Task { runImportAlert(files, destinations) }
+    }
+
+    private func runImportAlert(_ files: [URL], _ destinations: [URL]) {
+        let alert = NSAlert()
+        alert.messageText = files.count == 1
+            ? "Add “\(files[0].lastPathComponent)” to a notes folder?"
+            : "Add \(files.count) Markdown files to a notes folder?"
+        alert.informativeText = "NoteMD keeps notes in notes folders, versioned with git. Copy leaves the original where it is; Move takes it out of its current folder."
+        let popup = NSPopUpButton(frame: NSRect(x: 0, y: 0, width: 300, height: 26), pullsDown: false)
+        for url in destinations {
+            popup.addItem(withTitle: url.lastPathComponent + " — " + PathDisplay.abbreviate(url.deletingLastPathComponent()))
+        }
+        alert.accessoryView = popup
+        alert.addButton(withTitle: "Copy")
+        alert.addButton(withTitle: "Move")
+        alert.addButton(withTitle: "Cancel")
+        let response = alert.runModal()
+        guard response == .alertFirstButtonReturn || response == .alertSecondButtonReturn else {
+            if !hasRepositoryWindows { showWelcome() }
+            return
+        }
+        importNotes(files, into: destinations[max(popup.indexOfSelectedItem, 0)], move: response == .alertSecondButtonReturn)
+    }
+
+    func importNotes(_ files: [URL], into repository: URL, move: Bool) {
+        openRepository(repository)
+        guard let store = controllers.first(where: { $0.store.rootURL == repository.canonical })?.store else { return }
+        store.importNotes(files, move: move)
     }
 
     /// The repository files from other apps go to: the last focused window, else the most recent repository.
@@ -156,19 +220,34 @@ import SwiftUI
         return true
     }
 
-    /// Services menu: a new note from the selection in another app.
+    /// Services menu and Share menu: Markdown files are imported, anything else becomes a new note.
     func addNoteFromService(_ pasteboard: NSPasteboard) {
-        let files = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
-        let web = files.isEmpty ? (pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] ?? []) : []
-        let text = pasteboard.string(forType: .string) ?? web.first?.absoluteString
-        let image = pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff)
+        let allFiles = pasteboard.readObjects(forClasses: [NSURL.self], options: [.urlReadingFileURLsOnly: true]) as? [URL] ?? []
+        let markdown = allFiles.filter(NoteImport.isMarkdown)
+        let files = allFiles.filter { !NoteImport.isMarkdown($0) }
+        let web = allFiles.isEmpty ? (pasteboard.readObjects(forClasses: [NSURL.self], options: nil) as? [URL] ?? []) : []
+        // Selected files come with their names as text too: ignore it then.
+        let text = allFiles.isEmpty ? pasteboard.string(forType: .string) ?? web.first?.absoluteString : nil
+        let image = allFiles.isEmpty ? pasteboard.data(forType: .png) ?? pasteboard.data(forType: .tiff) : nil
+        if !markdown.isEmpty { open(markdown) }
+        guard !files.isEmpty || text != nil || image != nil else { return }
         guard let store = destinationStore() else {
             presentError("Open a notes folder first to create notes from other apps.")
             showWelcome()
             return
         }
-        store.addNote(text: files.isEmpty ? text : nil, files: files, imageData: image)
+        store.addNote(text: text, files: files, imageData: image)
         if let controller = controllers.first(where: { $0.store === store }) { present(controller.window) }
+    }
+
+    /// The Share menu's extension leaves what was shared on this pasteboard, then opens `<scheme>://share`.
+    static let sharePasteboard = NSPasteboard.Name((Bundle.main.bundleIdentifier ?? "com.itsjavi.notemd") + ".share")
+
+    func addSharedItems() {
+        let pasteboard = NSPasteboard(name: Self.sharePasteboard)
+        guard pasteboard.pasteboardItems?.isEmpty == false else { return }
+        addNoteFromService(pasteboard)
+        pasteboard.clearContents()
     }
 
     func showOpenPanel() {
@@ -176,9 +255,10 @@ import SwiftUI
         panel.canChooseDirectories = true
         panel.canChooseFiles = true
         panel.allowsMultipleSelection = true
-        panel.message = "Open a notes folder, or a Markdown or text file."
+        panel.allowedContentTypes = [.folder, UTType("net.daringfireball.markdown") ?? .plainText]
+        panel.message = "Open a notes folder, or choose Markdown files to add to one."
         guard panel.runModal() == .OK else { return }
-        for url in panel.urls { openFile(url) }
+        open(panel.urls)
     }
 
     // MARK: Windows
@@ -206,16 +286,22 @@ import SwiftUI
         AppSettings.shared.openRepositories = controllers.map { PathDisplay.abbreviate($0.store.rootURL) }
     }
 
-    /// Reopens the repositories open at quit, or else the most recently used one that still exists.
+    /// Reopens the notes folders open at quit; with “Always open the last notes folder”, the most recent one otherwise.
     func restoreRepositories() {
         let settings = AppSettings.shared
         for url in settings.openRepositories.map(PathDisplay.expand) where FileManager.default.fileExists(atPath: url.path) {
             openRepository(url)
         }
-        guard controllers.isEmpty else { return }
-        if let recent = settings.recentRepositories.map(PathDisplay.expand).first(where: { FileManager.default.fileExists(atPath: $0.path) }) {
-            openRepository(recent)
-        }
+        if controllers.isEmpty && settings.alwaysOpenLastRepository { openLastRepository() }
+    }
+
+    /// Opens the most recent notes folder that still exists; false when there's none.
+    @discardableResult
+    func openLastRepository() -> Bool {
+        let recent = AppSettings.shared.recentRepositories.map(PathDisplay.expand).first { FileManager.default.fileExists(atPath: $0.path) }
+        guard let recent else { return false }
+        openRepository(recent)
+        return true
     }
 
     func showWelcome() {
@@ -232,6 +318,8 @@ import SwiftUI
         window.isReleasedWhenClosed = false
         window.tabbingMode = .disallowed
         window.title = "Welcome to NoteMD"
+        // A window made from a view controller starts empty; size it to its content before centring.
+        window.layoutIfNeeded()
         window.center()
         welcomeWindow = window
         present(window)
@@ -274,9 +362,13 @@ final class RepositoryWindowController: NSWindowController, NSWindowDelegate {
         super.init(window: window)
         window.delegate = self
         install(store)
-        window.center()
-        window.setFrameAutosaveName("Repository " + store.rootURL.path)
+        // A new name: frames saved while windows opened off-centre aren't reused.
+        let autosaveName = Self.autosaveName(store)
+        if !window.setFrameUsingName(autosaveName) { window.center() }
+        window.setFrameAutosaveName(autosaveName)
     }
+
+    private static func autosaveName(_ store: RepositoryStore) -> String { "Repository Window " + store.rootURL.path }
 
     @available(*, unavailable)
     required init?(coder: NSCoder) { fatalError() }
@@ -285,7 +377,10 @@ final class RepositoryWindowController: NSWindowController, NSWindowDelegate {
         let hosting = NSHostingController(rootView: RepositoryWindowView().environment(store))
         hosting.sceneBridgingOptions = [.toolbars, .title]
         hosting.sizingOptions = [.minSize]
+        // Installing a hosting controller shrinks the window to the view's initial, empty size: keep the frame.
+        let frame = window?.frame
         window?.contentViewController = hosting
+        if let frame { window?.setFrame(frame, display: false) }
         window?.title = store.name
         window?.representedURL = store.rootURL
         store.start()
@@ -295,7 +390,7 @@ final class RepositoryWindowController: NSWindowController, NSWindowDelegate {
         let old = store
         store = newStore
         install(newStore)
-        window?.setFrameAutosaveName("Repository " + newStore.rootURL.path)
+        window?.setFrameAutosaveName(Self.autosaveName(newStore))
         Task { await old.close() }
     }
 
@@ -339,7 +434,7 @@ enum RepositorySeeder {
     - [ ] Open the *Templates* folder and use the code review prompt
 
     > [!TIP]
-    > Any `.md` or text file can also be opened on its own: drag it onto NoteMD in the Dock.
+    > Drag a Markdown file onto NoteMD in the Dock, or share it from Finder, to copy or move it into a notes folder.
 
     | Shortcut | Action |
     | -------- | ------ |

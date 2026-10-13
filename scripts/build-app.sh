@@ -1,6 +1,9 @@
 #!/usr/bin/env bash
 # Assembles NoteMD.app from the SwiftPM build.
 # Usage: scripts/build-app.sh [release|dev|test]
+#   SIGN_IDENTITY="Developer ID Application: …"   # sign with a real identity: hardened runtime + secure timestamp
+#                                                 # (default: ad-hoc; scripts/release.sh sets it)
+#   SHARE=1                                       # embed the Share menu extension in a Dev/Test build too
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -12,7 +15,11 @@ case "$VARIANT" in
   *) echo "unknown variant: $VARIANT" >&2; exit 64 ;;
 esac
 
+# The Share menu extension registers system-wide: only the release build embeds it, unless SHARE=1.
+if [[ -z "${SHARE:-}" ]]; then SHARE=$([[ "$VARIANT" == "release" ]] && echo 1 || echo 0); fi
+
 swift build -c "$CONFIG" --product NoteMD
+if [[ "$SHARE" == "1" ]]; then swift build -c "$CONFIG" --product NoteMDShare; fi
 BIN="$(swift build -c "$CONFIG" --show-bin-path)"
 APP="build/$NAME.app"
 PLIST="$APP/Contents/Info.plist"
@@ -52,7 +59,27 @@ if [[ -d Resources/AppIcon.icon ]]; then
   rm -rf "$ICON_DIR"
 fi
 
+# Share menu extension (sandboxed), signed before the app that seals it.
 SIGN_IDENTITY="${SIGN_IDENTITY:--}"
+if [[ "$SHARE" == "1" ]]; then
+  APPEX="$APP/Contents/PlugIns/NoteMDShare.appex"
+  APPEX_PLIST="$APPEX/Contents/Info.plist"
+  mkdir -p "$APPEX/Contents/MacOS"
+  cp "$BIN/NoteMDShare" "$APPEX/Contents/MacOS/NoteMDShare"
+  cp Resources/Share/Info.plist "$APPEX_PLIST"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleIdentifier $BUNDLE_ID.share" "$APPEX_PLIST"
+  /usr/libexec/PlistBuddy -c "Set :CFBundleDisplayName $NAME" "$APPEX_PLIST"
+  /usr/libexec/PlistBuddy -c "Set :AppURLScheme $SCHEME" "$APPEX_PLIST"
+  for key in CFBundleShortVersionString CFBundleVersion; do
+    /usr/libexec/PlistBuddy -c "Set :$key $(pb "Print :$key")" "$APPEX_PLIST"
+  done
+  if [[ "$SIGN_IDENTITY" == "-" ]]; then
+    codesign --force --sign - --entitlements Resources/Share/NoteMDShare.entitlements "$APPEX"
+  else
+    codesign --force --options runtime --timestamp --entitlements Resources/Share/NoteMDShare.entitlements --sign "$SIGN_IDENTITY" "$APPEX"
+  fi
+fi
+
 if [[ "$SIGN_IDENTITY" == "-" ]]; then
   codesign --force --sign - "$APP"
 else

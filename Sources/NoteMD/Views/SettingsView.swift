@@ -22,6 +22,7 @@ struct SettingsView: View {
                         .foregroundStyle(.secondary)
                 }
                 Section("Notes") {
+                    Toggle("Always open the last notes folder", isOn: $settings.alwaysOpenLastRepository)
                     Toggle("Show notes from subfolders in folders", isOn: $settings.includeSubfolders)
                     Toggle("Show front matter in the editor", isOn: $settings.showFrontMatter)
                 }
@@ -76,7 +77,7 @@ struct SettingsView: View {
                 } header: {
                     Text("Indentation")
                 } footer: {
-                    Text("What the Tab key inserts in notes and text files. Shift-Tab removes one level. Existing text isn't changed.")
+                    Text("What the Tab key inserts in notes. Shift-Tab removes one level. Existing text isn't changed.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }

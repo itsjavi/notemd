@@ -2,15 +2,13 @@ import AppKit
 import NoteMDCore
 import SwiftUI
 
-/// Where a template comes from: a repository note or a standalone document.
+/// Where a template comes from: a repository note.
 enum TemplateSource {
     case note(NoteEditor)
-    case document(title: String, markdown: String, fileURL: URL?)
 
     var markdown: MarkdownText {
         switch self {
         case .note(let editor): editor.markdown
-        case .document(_, let markdown, _): MarkdownText(markdown)
         }
     }
 
@@ -19,21 +17,18 @@ enum TemplateSource {
         case .note(let editor):
             // A heading full of placeholders reads badly; use the file name then.
             editor.title.contains("{{") ? (editor.url.lastPathComponent as NSString).deletingPathExtension : editor.title
-        case .document(let title, _, _): title
         }
     }
 
     var storageKey: String {
         switch self {
         case .note(let editor): "templateValues:" + editor.url.path
-        case .document(let title, _, let url): "templateValues:" + (url?.path ?? title)
         }
     }
 
     var directory: URL? {
         switch self {
         case .note(let editor): editor.url.deletingLastPathComponent()
-        case .document(_, _, let url): url?.deletingLastPathComponent()
         }
     }
 }

@@ -83,6 +83,8 @@
 	<key>CFBundleDocumentTypes</key>
 	<array>
 		<dict>
+			<!-- Opening a Markdown file offers to copy or move it into a notes folder. Alternate: listed under
+			     Open With without becoming the default app. -->
 			<key>CFBundleTypeName</key>
 			<string>Markdown Document</string>
 			<key>CFBundleTypeRole</key>
@@ -93,58 +95,9 @@
 			<array>
 				<string>net.daringfireball.markdown</string>
 			</array>
-			<key>NSDocumentClass</key>
-			<string>TextFileDocument</string>
 		</dict>
 		<dict>
-			<key>CFBundleTypeName</key>
-			<string>HTML Document</string>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>LSHandlerRank</key>
-			<string>Alternate</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>public.html</string>
-			</array>
-			<key>NSDocumentClass</key>
-			<string>TextFileDocument</string>
-		</dict>
-		<dict>
-			<key>CFBundleTypeName</key>
-			<string>Text Document</string>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>LSHandlerRank</key>
-			<string>Alternate</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>public.text</string>
-				<string>public.plain-text</string>
-				<string>public.source-code</string>
-				<string>public.script</string>
-				<string>public.json</string>
-				<string>public.xml</string>
-			</array>
-			<key>NSDocumentClass</key>
-			<string>TextFileDocument</string>
-		</dict>
-		<dict>
-			<!-- Unknown extensions (.env.example, Makefile…) get dynamic types; binary content is refused on read. -->
-			<key>CFBundleTypeName</key>
-			<string>Other File</string>
-			<key>CFBundleTypeRole</key>
-			<string>Editor</string>
-			<key>LSHandlerRank</key>
-			<string>Alternate</string>
-			<key>LSItemContentTypes</key>
-			<array>
-				<string>public.data</string>
-			</array>
-			<key>NSDocumentClass</key>
-			<string>TextFileDocument</string>
-		</dict>
-		<dict>
+			<!-- Folders dropped on the Dock icon open as notes folders; never offered as a handler. -->
 			<key>CFBundleTypeName</key>
 			<string>Notes Folder</string>
 			<key>CFBundleTypeRole</key>

@@ -2,10 +2,15 @@ import AVFoundation
 import AppKit
 import NoteMDCore
 
-/// Handles the app's URL scheme. Release builds accept no verbs; DEBUG builds expose
-/// test hooks that call the same model methods as the UI, restricted to temp folders.
+/// Handles the app's URL scheme. Every build accepts `share` (the Share menu extension's wake-up: what was shared
+/// waits on a private pasteboard); DEBUG builds also expose test hooks that call the same model methods as the UI,
+/// restricted to temp folders.
 enum URLCommandHandler {
     static func handle(_ url: URL) {
+        if url.host() == "share" && url.path().isEmpty {
+            WindowManager.shared.addSharedItems()
+            return
+        }
         #if DEBUG
         DebugHooks.handle(url)
         #endif
@@ -43,7 +48,24 @@ enum DebugHooks {
                 windows.openRepository(URL(fileURLWithPath: path))
             }
         case "ui/open-file":
-            if let path = safePath(query["path"]) { windows.openFile(URL(fileURLWithPath: path)) }
+            if let path = safePath(query["path"]) { windows.open([URL(fileURLWithPath: path)]) }
+        case "ui/import":
+            // Answers the import alert opening Markdown files shows: `action=copy|move|cancel`, `dest=` a notes folder
+            // (default: the first one the alert offers).
+            let files = windows.pendingImport
+            windows.pendingImport = []
+            guard !files.isEmpty, query["action"] == "copy" || query["action"] == "move" else { return }
+            let destination = query["dest"].flatMap { safePath($0) }.map { URL(fileURLWithPath: $0) } ?? windows.importDestinations().first
+            if let destination { windows.importNotes(files, into: destination, move: query["action"] == "move") }
+        case "ui/share":
+            // What the share extension leaves on the share pasteboard; `notemd-test://share` then picks it up.
+            let pasteboard = NSPasteboard(name: WindowManager.sharePasteboard)
+            pasteboard.clearContents()
+            let files = (query["files"] ?? "").split(separator: ",").compactMap { safePath(String($0)) }
+            if !files.isEmpty { pasteboard.writeObjects(files.map { URL(fileURLWithPath: $0) as NSURL }) }
+            if let text = query["text"] { pasteboard.setString(text, forType: .string) }
+        case "ui/always-open-last":
+            AppSettings.shared.alwaysOpenLastRepository = query["value"] == "1"
         case "ui/settings":
             // Same path as the app menu's Settings… item.
             if let item = NSApp.mainMenu?.items.first?.submenu?.items.first(where: { $0.keyEquivalent == "," }), let action = item.action {
@@ -181,11 +203,8 @@ enum DebugHooks {
                 if let file = store.deletedFiles.first(where: { $0.path == path }) { await store.restoreDeleted(file) }
             }
         case "ui/editor-command":
-            // Runs a text command in the first editor of the repository (or document) window.
-            let windowsToSearch: [NSWindow] = query["target"] == "document"
-                ? NSDocumentController.shared.documents.flatMap { $0.windowControllers.compactMap(\.window) }
-                : (store.flatMap { s in windows.controllers.first { $0.store === s }?.window }.map { [$0] } ?? [])
-            guard let textView = windowsToSearch.lazy.compactMap({ $0.contentView.flatMap(findTextView) }).first else { return }
+            // Runs a text command in the repository window's editor.
+            guard let textView = editorTextView(query) else { return }
             switch query["select"] {
             case "all": textView.setSelectedRange(NSRange(location: 0, length: (textView.string as NSString).length))
             case "end": textView.setSelectedRange(NSRange(location: (textView.string as NSString).length, length: 0))
@@ -237,16 +256,12 @@ enum DebugHooks {
             // The recorder's real start/stop path, with the microphone replaced by a clip copied from
             // `from` or a generated tone of `seconds`.
             let source = query["from"].flatMap { safePath($0) }.map { URL(fileURLWithPath: $0) }
-            let recorder = query["target"] == "document" ? debugDocument?.model.voiceRecorder : store?.voiceRecorder
-            recorder?.simulatedClip = { url in makeClip(at: url, from: source, query: query) }
-            if query["target"] == "document" { debugDocument?.model.startVoiceNote() } else { store?.startVoiceNote() }
+            store?.voiceRecorder.simulatedClip = { url in makeClip(at: url, from: source, query: query) }
+            store?.startVoiceNote()
         case "ui/find":
-            // Edit > Find on the repository window (or the first document with target=document). `q` and `with`
-            // fill the find bar's fields; the shared find pasteboard NSTextFinder writes is put back afterwards.
-            let window = query["target"] == "document"
-                ? NSDocumentController.shared.documents.first?.windowControllers.first?.window
-                : store.flatMap { s in windows.controllers.first { $0.store === s }?.window }
-            guard let window else { return }
+            // Edit > Find on the repository window. `q` and `with` fill the find bar's fields; the shared find
+            // pasteboard NSTextFinder writes is put back afterwards.
+            guard let window = store.flatMap({ s in windows.controllers.first { $0.store === s }?.window }) else { return }
             let findPasteboard = NSPasteboard(name: .find)
             let saved = findPasteboard.string(forType: .string)
             let actions: [String: NSTextFinder.Action] = [
@@ -279,7 +294,7 @@ enum DebugHooks {
             default: break
             }
         case "debug/editor-bench":
-            // Times typing and full redraws in the first editor (target=document for a document window).
+            // Times typing and full redraws in the repository window's editor.
             guard let textView = editorTextView(query), let out = query["out"].flatMap({ safePath($0) }) else { return }
             textView.setSelectedRange(NSRange(location: (textView.string as NSString).length / 2, length: 0))
             let clock = ContinuousClock()
@@ -302,12 +317,8 @@ enum DebugHooks {
             }
             let lines = (textView.string as NSString).components(separatedBy: "\n").count
             try? "lines: \(lines)\ntyping: \(typing / 100) per keystroke\nscrolling: \(scrolling / 40) per scroll step\n".write(toFile: out, atomically: true, encoding: .utf8)
-        case "ui/document-active-content":
-            // The HTML preview's Scripts and Remote Content toggle of the first document window.
-            debugDocument?.model.allowsActiveContent = query["value"] == "1"
         case "ui/voice-stop", "ui/voice-cancel":
-            let recorder = query["target"] == "document" ? debugDocument?.model.voiceRecorder : store?.voiceRecorder
-            if verb == "ui/voice-stop" { recorder?.stop() } else { recorder?.cancel() }
+            if verb == "ui/voice-stop" { store?.voiceRecorder.stop() } else { store?.voiceRecorder.cancel() }
         case "ui/transcribe":
             guard let store, let editor = store.editor, let source = query["src"],
                   let audio = store.audioURL(forSource: source, inNoteAt: editor.path)
@@ -348,16 +359,9 @@ enum DebugHooks {
         }
     }
 
-    private static var debugDocument: TextFileDocument? {
-        NSDocumentController.shared.documents.first as? TextFileDocument
-    }
-
-    /// The editor of the repository window, or of the first document with `target=document`.
+    /// The editor of the repository window.
     private static func editorTextView(_ query: [String: String]) -> MarkdownTextView? {
-        let windowsToSearch: [NSWindow] = query["target"] == "document"
-            ? NSDocumentController.shared.documents.flatMap { $0.windowControllers.compactMap(\.window) }
-            : (store.flatMap { s in windows.controllers.first { $0.store === s }?.window }.map { [$0] } ?? [])
-        return windowsToSearch.lazy.compactMap { $0.contentView.flatMap(findTextView) }.first
+        store.flatMap { s in windows.controllers.first { $0.store === s }?.window }?.contentView.flatMap(findTextView)
     }
 
     /// Copies `source` to `url`, or writes a short 440 Hz tone (`seconds`, default 1).
@@ -448,8 +452,9 @@ enum DebugHooks {
         let findBars = NSApp.windows.compactMap { window in window.contentView.flatMap(EditorFind.editorTextView(in:))?.enclosingScrollView }
         lines.append("findBar: \(findBars.map { scroll in scroll.isFindBarVisible ? "visible " + (scroll.findBarView.map(findBarLabels) ?? []).joined(separator: " / ") : "hidden" })")
         lines.append("invisibles: \(AppSettings.shared.showInvisibles)")
-        lines.append("documents: \(NSDocumentController.shared.documents.compactMap { $0.fileURL?.path })")
-        lines.append("documentKinds: \(NSDocumentController.shared.documents.compactMap { ($0 as? TextFileDocument).map { "\($0.model.kind)\($0.model.allowsActiveContent ? "+active" : "")" } })")
+        lines.append("windowFrames: \(NSApp.windows.filter(\.isVisible).map { "\($0.title)=\(NSStringFromRect($0.frame)) on \(NSStringFromRect($0.screen?.visibleFrame ?? .zero))" })")
+        lines.append("pendingImport: \(windows.pendingImport.map(\.path))")
+        lines.append("alwaysOpenLast: \(AppSettings.shared.alwaysOpenLastRepository)")
         if let store {
             lines.append("store: \(store.displayPath)")
             lines.append("loaded: \(store.isLoaded)")
@@ -483,9 +488,6 @@ enum DebugHooks {
                 lines.append("editor.params: \(editor.parameters.map { "\($0.name):\($0.type.rawValue)" })")
                 lines.append("editor.text: \(editor.fullText.prefix(4000).debugDescription)")
             }
-        }
-        if let document = NSDocumentController.shared.documents.first as? TextFileDocument {
-            lines.append("document.text: \(document.model.text.prefix(4000).debugDescription)")
         }
         lines.append("attachmentMode: \(AppSettings.shared.attachmentImportMode.rawValue)")
         lines.append("mode: \(AppSettings.shared.editorMode.rawValue)")

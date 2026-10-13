@@ -5,6 +5,7 @@ struct WelcomeView: View {
     private var windows: WindowManager { .shared }
 
     var body: some View {
+        @Bindable var settings = settings
         HStack(spacing: 0) {
             VStack(spacing: 18) {
                 Spacer()
@@ -23,12 +24,11 @@ struct WelcomeView: View {
                     WelcomeAction(icon: "folder", title: "Open a Folder…", subtitle: "Use existing Markdown files as notes") {
                         windows.chooseRepository(replacing: nil)
                     }
-                    WelcomeAction(icon: "doc.text", title: "Open a File…", subtitle: "Edit a single Markdown or text file") {
-                        windows.showOpenPanel()
-                    }
                 }
                 .padding(.top, 8)
                 Spacer()
+                Toggle("Always open the last notes folder", isOn: $settings.alwaysOpenLastRepository)
+                    .help("Skip this window: open the most recent notes folder when NoteMD starts or you click its Dock icon")
             }
             .padding(32)
             .frame(width: 420)
