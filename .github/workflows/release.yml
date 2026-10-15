@@ -124,7 +124,9 @@ jobs:
           fi
           printf '\nCheck a download with `shasum -a 256 -c SHA256SUMS --ignore-missing`.\n' >> "$notes"
           if gh release view "$TAG" >/dev/null 2>&1; then
-            gh release upload "$TAG" "${files[@]}" --clobber
+            # Published already (e.g. a notarized build from a Mac, docs/releasing.md): replacing its files would
+            # break the feed's signatures, and a build without secrets would replace notarized files with ad-hoc ones.
+            echo "::notice::$TAG is already released; leaving its files as they are"
           else
             flags=(--title "$TAG" --notes-file "$notes" --generate-notes --verify-tag)
             if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi

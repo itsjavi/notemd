@@ -1,6 +1,24 @@
 # Releasing NoteMD
 
-For maintainers. Releases and the update feed live on GitHub Releases (decision-10).
+For maintainers. Releases and the update feed live on GitHub Releases (decision-10). There are two routes: from
+this Mac with the credentials already in its Keychain (no GitHub secrets, how QuickEdit ships), or from the Release
+workflow once the `release` environment has the secrets below.
+
+## From this Mac (no secrets)
+
+```bash
+make bump V=0.1.0                 # tag locally (V=patch etc. bumps VERSION first); nothing is pushed
+make build-notarized              # Developer ID + the `lamina` notarytool profile from the Keychain
+make appcast                      # signs the feed with the Sparkle key in the Keychain (account notemd)
+git push --atomic origin main v0.1.0
+gh release create v0.1.0 build/release/NoteMD-0.1.0.dmg build/release/NoteMD-0.1.0.zip \
+  build/release/SHA256SUMS build/appcast/appcast.xml --title v0.1.0 --generate-notes --verify-tag
+```
+
+The pushed tag still starts the Release workflow, but it leaves an existing release alone. Create the release right
+after pushing: the workflow tests and builds for several minutes before it would publish its own.
+
+## From the Release workflow
 
 ```bash
 make bump V=0.1.0 PUSH=1          # first release: tags the current VERSION (no bump), pushes main and v0.1.0
