@@ -17,6 +17,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationDidFinishLaunching(_ notification: Notification) {
         launchFinished = true
+        AppLock.shared.start()
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
         // The open-documents event of a launch arrives before this point, URL events after it.
@@ -61,6 +62,8 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
 
     func applicationShouldTerminate(_ sender: NSApplication) -> NSApplication.TerminateReply {
         WindowManager.shared.isTerminating = true
+        // Closes secret notes and hidden folders (saving them) before anything else.
+        AppLock.shared.lock()
         WindowManager.shared.rememberOpenRepositories()
         // Reply as soon as saves and commits finish, or after a cap so a stuck git never blocks quitting.
         // (A task group would wait for the timer child too, delaying every quit by the full cap.)

@@ -24,10 +24,20 @@ import Observation
     @ObservationIgnored let textBridge = EditorTextBridge()
     @ObservationIgnored var onSave: ((NoteEditor) -> Void)?
     @ObservationIgnored var onSaveError: ((Error) -> Void)?
+    /// Turns the text into the file's bytes: UTF-8, or age-encrypted for secret notes, so the single save path never
+    /// writes their plaintext (decision-6).
+    @ObservationIgnored private let encode: (String) throws -> Data
+    let isSecret: Bool
 
-    init(path: String, url: URL, text: String, showsFrontMatter: Bool) {
+    init(path: String, url: URL, text: String, showsFrontMatter: Bool, secretRecipient: AgeRecipient? = nil) {
         self.path = path
         self.url = url
+        self.isSecret = secretRecipient != nil
+        if let secretRecipient {
+            encode = { try Age.encrypt(Data($0.utf8), to: [secretRecipient]) }
+        } else {
+            encode = { Data($0.utf8) }
+        }
         self.markdown = MarkdownText(text)
         self.showsFrontMatter = showsFrontMatter
         self.lastSavedText = text
@@ -132,7 +142,7 @@ import Observation
             return true
         }
         do {
-            try SafeFileWriter.write(Data(text.utf8), to: url)
+            try SafeFileWriter.write(encode(text), to: url)
             lastSavedText = text
             isDirty = false
             onSave?(self)

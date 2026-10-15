@@ -105,6 +105,10 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
     var attachmentImportMode: AttachmentImportMode { didSet { defaults.set(attachmentImportMode.rawValue, forKey: Keys.attachmentImportMode) } }
     /// Locale identifier preselected for transcriptions; empty means the system language.
     var transcriptionLanguage: String { didSet { defaults.set(transcriptionLanguage, forKey: Keys.transcriptionLanguage) } }
+    /// Off gives the sidebar a solid background instead of the translucent glass that lets the desktop show through.
+    var translucentWindows: Bool { didSet { defaults.set(translucentWindows, forKey: Keys.translucentWindows) } }
+    /// Seconds without activity before NoteMD locks hidden folders and secret notes again (decision-6: at most 5 minutes).
+    var lockAfter: Double { didSet { defaults.set(lockAfter, forKey: Keys.lockAfter) } }
 
     private enum Keys {
         static let commitDelay = "commitDelay"
@@ -126,6 +130,8 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
         static let alwaysOpenLastRepository = "alwaysOpenLastRepository"
         static let attachmentImportMode = "attachmentImportMode"
         static let transcriptionLanguage = "transcriptionLanguage"
+        static let translucentWindows = "translucentWindows"
+        static let lockAfter = "lockAfter"
     }
 
     private init() {
@@ -146,6 +152,8 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
             Keys.loadRemoteImages: true,
             Keys.attachmentImportMode: AttachmentImportMode.ask.rawValue,
             Keys.transcriptionLanguage: "",
+            Keys.translucentWindows: true,
+            Keys.lockAfter: 120.0,
         ])
         commitDelay = defaults.double(forKey: Keys.commitDelay)
         editorFontStyle = EditorFontStyle(rawValue: defaults.string(forKey: Keys.editorFontStyle) ?? "") ?? .system
@@ -166,6 +174,8 @@ enum AttachmentImportMode: String, CaseIterable, Identifiable {
         alwaysOpenLastRepository = defaults.bool(forKey: Keys.alwaysOpenLastRepository)
         attachmentImportMode = AttachmentImportMode(rawValue: defaults.string(forKey: Keys.attachmentImportMode) ?? "") ?? .ask
         transcriptionLanguage = defaults.string(forKey: Keys.transcriptionLanguage) ?? ""
+        translucentWindows = defaults.bool(forKey: Keys.translucentWindows)
+        lockAfter = min(max(defaults.double(forKey: Keys.lockAfter), 1), 300)
     }
 
     var indentation: Indentation { Indentation(usesTabs: indentWithTabs, width: indentWidth) }

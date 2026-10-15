@@ -105,7 +105,7 @@ extension RepositoryStore {
         if let editor, editor.path == path {
             current = editor.fullText
         } else {
-            guard SafeFileWriter.isSafeRelativePath(path), let text = RepositoryScanner.readText(fileURL(for: path)) else { return }
+            guard SafeFileWriter.isSafeRelativePath(path), let text = readNoteText(path) else { return }
             current = text
         }
         guard let change = Self.change(from: current, to: transform(current)) else { return }

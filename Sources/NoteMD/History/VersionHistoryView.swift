@@ -214,8 +214,7 @@ struct VersionHistoryView: View {
     private var noteDirectory: URL { store.fileURL(for: path).deletingLastPathComponent() }
 
     private var currentText: String {
-        if let editor = store.editor, editor.path == path { return editor.fullText }
-        return RepositoryScanner.readText(store.fileURL(for: path)) ?? ""
+        store.currentText(ofNoteAt: path) ?? ""
     }
 
     private func previousContent(of id: String) -> String? {
@@ -242,12 +241,13 @@ struct VersionHistoryView: View {
     }
 
     private func loadContents(for id: String?) async {
-        guard let id, id != Self.currentID, let git = store.git, let index = commits.firstIndex(where: { $0.id == id }) else { return }
+        guard let id, id != Self.currentID, store.git != nil, let index = commits.firstIndex(where: { $0.id == id }) else { return }
         var needed = [commits[index]]
         if index + 1 < commits.count { needed.append(commits[index + 1]) }
         for (offset, commit) in needed.enumerated() where contents[commit.id] == nil {
             do {
-                if let text = try await git.content(of: commit.path ?? store.gitPath(path), at: commit.id) {
+                // Secret notes: each revision is decrypted while NoteMD is unlocked.
+                if let text = try await store.historyText(of: commit.path ?? store.gitPath(path), at: commit.id) {
                     contents[commit.id] = text
                 } else if offset == 0 {
                     // The selected version must exist; an older one may legitimately be missing (creation).

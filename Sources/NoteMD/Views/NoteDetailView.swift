@@ -137,6 +137,11 @@ private struct NoteHeaderBar: View {
                         .foregroundStyle(.secondary)
                         .help("Not versioned, and deleted when this window closes. Move it into a folder to keep it.")
                 }
+                if editor.isSecret {
+                    Label("Secret", systemImage: "lock.fill")
+                        .foregroundStyle(.secondary)
+                        .help("Encrypted on disk. It closes when NoteMD locks. Attachments aren't encrypted.")
+                }
                 if editor.isTemplate {
                     TemplateBadge(editor: editor)
                 }
@@ -267,6 +272,7 @@ private struct NoteToolbar: ToolbarContent {
                     Button("Edit Parameters…") { store.sheet = .templateParameters(path: editor.path) }
                 }
                 TemplateConversionButtons(path: editor.path)
+                SecretNoteButton(path: editor.path)
                 Divider()
                 Button("Rename…") { store.sheet = .renameNote(path: editor.path) }
                 Button("Duplicate") { store.duplicateNote(editor.path) }
@@ -316,7 +322,7 @@ private struct DeletedNoteDetail: View {
             .task(id: path) {
                 content = nil
                 guard !RecentlyDeleted.isAsset(path) else { return }
-                content = (try? await store.git?.content(of: file.repositoryPath, at: file.lastRevision)) ?? ""
+                content = (try? await store.historyText(of: file.repositoryPath, at: file.lastRevision)) ?? ""
             }
         } else {
             ContentUnavailableView("Select a Deleted Note", systemImage: "trash", description: Text("Preview it and restore it to its folder."))

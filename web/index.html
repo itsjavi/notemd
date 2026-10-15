@@ -307,6 +307,36 @@
               />
             </a>
           </div>
+
+          <div class="feature">
+            <div class="feature-copy">
+              <h3>Hidden folders and secret notes</h3>
+              <p>
+                Hide a folder and it stays out of sight, with its notes, tags and search results,
+                until you unlock NoteMD with Touch ID or your password. Like the hidden album in
+                Photos: the files themselves aren't encrypted.
+              </p>
+              <p>
+                Make a note secret and it's encrypted on disk in the open
+                <a href="https://age-encryption.org">age</a> format, so its copies, backups and git
+                remote never hold its text. Secret notes are decrypted one at a time when you open
+                them, and a recovery key opens them on another Mac or with <code>age -d</code>.
+              </p>
+              <p>
+                NoteMD locks again after a few idle minutes (you choose, five at most), and right
+                away with Lock Now, screen lock, sleep or quit.
+              </p>
+            </div>
+            <a class="feature-shot" data-lightbox href="assets/secret-notes.webp">
+              <img
+                src="assets/secret-notes.webp"
+                width="1600"
+                height="1000"
+                loading="lazy"
+                alt="NoteMD unlocked: a hidden Journal folder marked with a crossed-out eye, and a secret note with a lock icon open in the editor and preview."
+              />
+            </a>
+          </div>
         </div>
       </section>
 
@@ -355,8 +385,8 @@
             <li>
               <h3>Native and portable</h3>
               <p>
-                SwiftUI and AppKit, light and dark. No database, no proprietary format: just a
-                folder and a git repository.
+                SwiftUI and AppKit, light and dark, with a glass or solid sidebar. No database, no
+                proprietary format: just a folder and a git repository.
               </p>
             </li>
           </ul>

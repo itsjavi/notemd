@@ -10,6 +10,13 @@ struct AttachmentImporter {
     let noteDirectory: URL
     /// Called after files were written into `assets/`.
     var didAddAssets: () -> Void = {}
+    /// The secret note the files go into: adding them asks first, since attachments aren't encrypted.
+    var secretNoteName: String?
+
+    /// Whether files may be added: always, except when the user declines the warning for a secret note.
+    func confirmsUnencrypted() -> Bool {
+        secretNoteName.map(SecretNotes.confirmUnencryptedAttachments(for:)) ?? true
+    }
 
     var assetsURL: URL { rootURL.appendingPathComponent(Attachments.folderName, isDirectory: true) }
 
@@ -18,6 +25,7 @@ struct AttachmentImporter {
     /// Markdown for `urls` (one link per line), or nil when the user cancelled or nothing could be added.
     /// Files from outside follow `mode`, or the Settings choice (possibly asking) when nil.
     func markdown(forFiles urls: [URL], mode forcedMode: AttachmentImportMode? = nil) -> String? {
+        guard confirmsUnencrypted() else { return nil }
         let urls = urls.map(\.canonical)
         let outside = urls.filter { !isInside($0) }
         var mode = AttachmentImportMode.copy
@@ -48,7 +56,7 @@ struct AttachmentImporter {
 
     /// Saves pasted image data as a PNG in `assets/` and returns its image link.
     func markdown(forImageData data: Data) -> String? {
-        guard let png = Self.pngData(data) else { return nil }
+        guard confirmsUnencrypted(), let png = Self.pngData(data) else { return nil }
         let name = Attachments.timestampedName(prefix: "image", pathExtension: "png")
         guard let url = newAssetURL(fileName: name) else { return nil }
         do {

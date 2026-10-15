@@ -9,28 +9,33 @@ public enum FolderColor: String, Sendable, CaseIterable, Codable, Identifiable {
     public var isNeutral: Bool { [.silver, .gray, .graphite, .charcoal].contains(self) }
 }
 
-/// Per-folder appearance persisted as `.notemd.json` inside the folder.
+/// Per-folder appearance persisted as `.notemd.json` inside the folder, with whether the folder is hidden.
 public struct FolderAppearance: Sendable, Hashable, Codable {
     /// SF Symbol name.
     public var icon: String?
     public var color: FolderColor?
+    /// Kept off the screen until the app is unlocked (decision-6). Metadata only: nothing is encrypted.
+    public var hidden: Bool
 
-    public init(icon: String? = nil, color: FolderColor? = nil) {
+    public init(icon: String? = nil, color: FolderColor? = nil, hidden: Bool = false) {
         self.icon = icon
         self.color = color
+        self.hidden = hidden
     }
 
+    /// No custom icon or color.
     public var isDefault: Bool { icon == nil && color == nil }
 
     public static let fileName = ".notemd.json"
 
-    enum CodingKeys: String, CodingKey { case icon, color }
+    enum CodingKeys: String, CodingKey { case icon, color, hidden }
 
     public init(from decoder: Decoder) throws {
         let container = try decoder.container(keyedBy: CodingKeys.self)
         icon = try container.decodeIfPresent(String.self, forKey: .icon)
         // Unknown color names fall back to default instead of failing the whole file.
         color = (try? container.decodeIfPresent(String.self, forKey: .color)).flatMap { $0.flatMap(FolderColor.init(rawValue:)) }
+        hidden = (try? container.decodeIfPresent(Bool.self, forKey: .hidden)) ?? false
     }
 
     public static func load(from folder: URL) -> FolderAppearance {
@@ -48,6 +53,7 @@ public struct FolderAppearance: Sendable, Hashable, Codable {
         }
         object["icon"] = icon
         object["color"] = color?.rawValue
+        object["hidden"] = hidden ? true : nil
         if object.isEmpty {
             if FileManager.default.fileExists(atPath: url.path) { try FileManager.default.removeItem(at: url) }
             return
@@ -95,4 +101,32 @@ public struct Folder: Sendable, Hashable, Identifiable {
 
     /// Depth-first list of all folders (excluding self).
     public var descendants: [Folder] { children.flatMap { [$0] + $0.descendants } }
+
+    public var isHidden: Bool { appearance.hidden }
+
+    /// Paths of the folders marked hidden (their sub-folders are hidden with them).
+    public var hiddenFolderPaths: [String] { descendants.filter(\.isHidden).map(\.path) }
+
+    /// Whether the note or folder at `path` is one of `folders` or inside one of them.
+    public static func path(_ path: String, isInside folders: [String]) -> Bool {
+        folders.contains { path == $0 || path.hasPrefix($0 + "/") }
+    }
+
+    /// The tree as shown: without hidden folders and their sub-folders unless `includingHidden`, with note counts
+    /// taken from `notePaths` (the notes that are listed) instead of the files on disk.
+    public func visibleTree(includingHidden: Bool, counting notePaths: [String]) -> Folder {
+        var direct: [String: Int] = [:]
+        for path in notePaths {
+            let parent = (path as NSString).deletingLastPathComponent
+            direct[parent == "." ? "" : parent, default: 0] += 1
+        }
+        func rebuild(_ folder: Folder) -> Folder {
+            var copy = folder
+            copy.children = folder.children.filter { includingHidden || !$0.isHidden }.map(rebuild)
+            copy.noteCount = direct[folder.path] ?? 0
+            copy.totalNoteCount = copy.noteCount + copy.children.reduce(0) { $0 + $1.totalNoteCount }
+            return copy
+        }
+        return rebuild(self)
+    }
 }

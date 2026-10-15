@@ -54,6 +54,13 @@ public enum RepositoryScanner {
                 }
                 continue
             }
+            if NoteMDCore.isSecretNotePath(itemName) {
+                // Listed by name only: never read or decrypted while scanning (decision-6).
+                let modified = values?.contentModificationDate ?? .distantPast
+                notes.append(Note(secretPath: itemPath, url: item, modified: modified, created: values?.creationDate ?? modified, size: values?.fileSize ?? 0))
+                folder.noteCount += 1
+                continue
+            }
             guard NoteMDCore.noteExtensions.contains(item.pathExtension.lowercased()) else { continue }
             if let note = note(at: item, path: itemPath, values: values, previous: previous) { notes.append(note) }
             folder.noteCount += 1

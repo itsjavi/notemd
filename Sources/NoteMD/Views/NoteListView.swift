@@ -202,6 +202,13 @@ struct NoteRowView: View {
                         .foregroundStyle(.orange)
                         .accessibilityLabel("Template")
                 }
+                if note.isSecret {
+                    Image(systemName: "lock.fill")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help("Secret note: encrypted on disk")
+                        .accessibilityLabel("Secret")
+                }
                 Text(note.title)
                     .font(.body.weight(.semibold))
                     .lineLimit(1)
@@ -279,6 +286,7 @@ struct NoteContextMenu: View {
         Button("Rename…") { store.sheet = .renameNote(path: path) }
         Button("Duplicate") { store.duplicateNote(path) }
         TemplateConversionButtons(path: path)
+        SecretNoteButton(path: path)
         // Moving an incognito note into the notes keeps it (versioned from then on).
         Menu(isIncognito ? "Keep In" : "Move To") {
             Button("Notes (top level)") { store.moveNote(path, toFolder: "") }
@@ -300,13 +308,29 @@ struct NoteContextMenu: View {
     }
 }
 
+/// Make Secret… for notes, Make Not Secret for secret notes (not for incognito notes).
+struct SecretNoteButton: View {
+    @Environment(RepositoryStore.self) private var store
+    let path: String
+
+    var body: some View {
+        if NoteMDCore.isSecretNotePath(path) {
+            Button("Make Not Secret") { store.makeNotSecret(path) }
+        } else if !RepositoryLayout.isIncognitoPath(path) {
+            Button("Make Secret…") { store.requestMakeSecret(path) }
+        }
+    }
+}
+
 /// Convert to Template / Duplicate as Template for notes, Convert to Note… / Duplicate as Note for templates.
 struct TemplateConversionButtons: View {
     @Environment(RepositoryStore.self) private var store
     let path: String
 
     var body: some View {
-        if store.note(at: path)?.isTemplate == true {
+        if NoteMDCore.isSecretNotePath(path) {
+            EmptyView()
+        } else if store.note(at: path)?.isTemplate == true {
             Button("Convert to Note…") { store.requestConvertToNote(path) }
             Button("Duplicate as Note") { store.convertNote(path, toTemplate: false, copy: true) }
         } else {

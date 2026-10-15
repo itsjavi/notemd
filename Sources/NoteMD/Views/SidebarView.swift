@@ -7,6 +7,7 @@ struct SidebarView: View {
     // Collapsed from the section headers; remembered across launches (all windows share them).
     @AppStorage("sidebarFoldersExpanded") private var foldersExpanded = true
     @AppStorage("sidebarTagsExpanded") private var tagsExpanded = true
+    private let settings = AppSettings.shared
 
     var body: some View {
         @Bindable var store = store
@@ -82,13 +83,37 @@ struct SidebarView: View {
                 }
             }
             .listStyle(.sidebar)
+            .scrollContentBackground(settings.translucentWindows ? .automatic : .hidden)
             .confirmationDialog("Empty Recently Deleted?", isPresented: $confirmEmptyDeleted) {
                 Button("Empty Recently Deleted", role: .destructive) { Task { await store.emptyRecentlyDeleted() } }
             } message: {
                 Text("This only clears the list. The notes stay in the repository's git history, so they can still be recovered with git.")
             }
+            .alert(
+                "Hide “\((store.folderPendingHide.map { ($0 as NSString).lastPathComponent }) ?? "")”?",
+                isPresented: Binding(get: { store.folderPendingHide != nil }, set: { if !$0 { store.folderPendingHide = nil } })
+            ) {
+                Button("Hide Folder") {
+                    if let path = store.folderPendingHide { store.setFolderHidden(path, true, confirmed: true) }
+                    store.folderPendingHide = nil
+                }
+                Button("Cancel", role: .cancel) { store.folderPendingHide = nil }
+            } message: {
+                Text(HiddenFolderText.explanation)
+            }
 
             SidebarFooter()
+        }
+        .toolbar {
+            if AppLock.shared.isInUse || store.hasPrivateContent {
+                ToolbarItem { LockButton() }
+            }
+        }
+        .background {
+            // Covers the sidebar's glass, which lets the desktop show through in the key window.
+            if !settings.translucentWindows {
+                Color(nsColor: .underPageBackgroundColor).ignoresSafeArea()
+            }
         }
     }
 
@@ -128,7 +153,16 @@ private struct FolderRow: View {
 
     var body: some View {
         Label {
-            Text(folder.name)
+            HStack(spacing: 4) {
+                Text(folder.name)
+                if folder.isHidden {
+                    Image(systemName: "eye.slash")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                        .help("Hidden: only shown while NoteMD is unlocked")
+                        .accessibilityLabel("Hidden")
+                }
+            }
         } icon: {
             FolderIcon(appearance: folder.appearance)
         }
@@ -143,6 +177,11 @@ private struct FolderRow: View {
             Button("New Folder Inside…") { store.beginCreateFolder(in: folder.path) }
             Divider()
             Button("Edit Folder…") { store.beginEditFolder(folder.path) }
+            if folder.isHidden {
+                Button("Show Folder") { store.setFolderHidden(folder.path, false) }
+            } else {
+                Button("Hide Folder") { store.setFolderHidden(folder.path, true) }
+            }
             Button("Show in Finder") { NSWorkspace.shared.activateFileViewerSelecting([store.url(forFolder: folder.path)]) }
             Divider()
             Button("Move to Trash", role: .destructive) { store.trashFolder(folder.path) }

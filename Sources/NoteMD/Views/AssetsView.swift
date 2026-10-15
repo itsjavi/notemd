@@ -113,7 +113,7 @@ struct AssetActions: View {
             Button("Rename…") { store.sheet = .renameAsset(path: row.path) }
             Button("Move to Bin…", role: .destructive) { store.assetsPendingTrash = [row.path] }
         } else {
-            ForEach(row.notes, id: \.self) { note in
+            ForEach(store.shownNotes(row.notes).shown, id: \.self) { note in
                 Button("Open “\(store.note(at: note)?.title ?? note)”") { store.openNote(note) }
             }
         }
@@ -169,7 +169,8 @@ struct AssetInspectorView: View {
             if row.notes.isEmpty {
                 Text("No note links this file.").foregroundStyle(.secondary)
             }
-            ForEach(row.notes, id: \.self) { note in
+            let users = store.shownNotes(row.notes)
+            ForEach(users.shown, id: \.self) { note in
                 HStack {
                     Button {
                         store.openNote(note)
@@ -181,6 +182,11 @@ struct AssetInspectorView: View {
                     Button("Unlink") { store.unlinkAsset(row.path, fromNoteAt: note) }
                         .help("Remove the links to this file from the note; the file stays")
                 }
+            }
+            if users.hidden > 0 {
+                Label(users.hidden == 1 ? "1 hidden note" : "\(users.hidden) hidden notes", systemImage: "eye.slash")
+                    .foregroundStyle(.secondary)
+                    .help("Unlock NoteMD to see the notes in hidden folders")
             }
         }
     }
@@ -279,7 +285,9 @@ struct AttachmentsPopover: View {
                     if others.isEmpty {
                         Text("Only used here").font(.caption).foregroundStyle(.secondary)
                     } else {
-                        Text("Also in " + others.map { store.note(at: $0)?.title ?? $0 }.formatted(.list(type: .and)))
+                        let users = store.shownNotes(others)
+                        let hidden = users.hidden == 0 ? [] : [users.hidden == 1 ? "1 hidden note" : "\(users.hidden) hidden notes"]
+                        Text("Also in " + (users.shown.map { store.note(at: $0)?.title ?? $0 } + hidden).formatted(.list(type: .and)))
                             .font(.caption).foregroundStyle(.secondary).lineLimit(2)
                     }
                 }

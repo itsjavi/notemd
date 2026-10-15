@@ -44,13 +44,14 @@ swift scripts/window-screenshot.swift "NoteMD Test" /private/tmp/shot
 
 Current shots and how they were taken (window 1440×900 for the hero, 1280×800 for the rest):
 
-| File                    | Setup                                                                  |
-| ----------------------- | ---------------------------------------------------------------------- |
-| `screenshot-light/dark` | All Notes, split mode, `Work/Q4 Roadmap.md`, light and dark appearance |
-| `version-history`       | `Work/Q4 Roadmap.md`, `ui/sheet?name=history`                          |
-| `template-form`         | `Prompts/Code Review Prompt.md`, `ui/sheet?name=form`                  |
-| `voice-note`            | preview mode, `Journal/Onboarding idea.md`                             |
-| `video-review`          | preview mode, `Work/Onboarding review.md`                              |
+| File                    | Setup                                                                                                                                               |
+| ----------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `screenshot-light/dark` | All Notes, split mode, `Work/Q4 Roadmap.md`, light and dark appearance                                                                              |
+| `version-history`       | `Work/Q4 Roadmap.md`, `ui/sheet?name=history`                                                                                                       |
+| `template-form`         | `Prompts/Code Review Prompt.md`, `ui/sheet?name=form`                                                                                               |
+| `voice-note`            | preview mode, `Journal/Onboarding idea.md`                                                                                                          |
+| `video-review`          | preview mode, `Work/Onboarding review.md`                                                                                                           |
+| `secret-notes`          | `ui/secret-setup`, `ui/hide-folder?path=Journal&confirm=0`, a note made with `ui/new-note` in Personal then `ui/make-secret`, All Notes, split mode |
 
 Convert and size them like the existing files:
 

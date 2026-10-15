@@ -62,6 +62,62 @@ import Testing
         #expect(!FileManager.default.fileExists(atPath: file.path))
     }
 
+    @Test func hiddenFlagIsReadAndWrittenKeepingOtherKeys() throws {
+        let folder = FileManager.default.temporaryDirectory.appendingPathComponent("notemd-folder-\(UUID().uuidString)")
+        try FileManager.default.createDirectory(at: folder, withIntermediateDirectories: true)
+        defer { try? FileManager.default.removeItem(at: folder) }
+        let file = folder.appendingPathComponent(FolderAppearance.fileName)
+        try #"{"custom": 1, "icon": "star.fill"}"#.write(to: file, atomically: true, encoding: .utf8)
+        var appearance = FolderAppearance.load(from: folder)
+        #expect(!appearance.hidden)
+        appearance.hidden = true
+        try appearance.save(to: folder)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "{\n  \"custom\" : 1,\n  \"hidden\" : true,\n  \"icon\" : \"star.fill\"\n}\n")
+        #expect(FolderAppearance.load(from: folder) == FolderAppearance(icon: "star.fill", hidden: true))
+        // A hidden folder without a style still has a file; showing it again drops the key.
+        try FolderAppearance(hidden: true).save(to: folder)
+        appearance = FolderAppearance.load(from: folder)
+        #expect(appearance.hidden && appearance.isDefault)
+        try FolderAppearance().save(to: folder)
+        #expect(try String(contentsOf: file, encoding: .utf8) == "{\n  \"custom\" : 1\n}\n")
+        try #"{"hidden": "yes"}"#.write(to: file, atomically: true, encoding: .utf8)
+        #expect(!FolderAppearance.load(from: folder).hidden)
+    }
+
+    @Test func visibleTreeLeavesOutHiddenFoldersAndRecounts() throws {
+        let root = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: root) }
+        try FolderAppearance(hidden: true).save(to: root.appendingPathComponent("Work/Projects"))
+        let snapshot = try RepositoryScanner.scan(rootURL: root)
+        #expect(snapshot.root.hiddenFolderPaths == ["Work/Projects"])
+        #expect(Folder.path("Work/Projects/Prompt.markdown", isInside: snapshot.root.hiddenFolderPaths))
+        #expect(Folder.path("Work/Projects", isInside: ["Work/Projects"]))
+        #expect(!Folder.path("Work/Projects 2/a.md", isInside: ["Work/Projects"]))
+        let shown = snapshot.notes.map(\.path).filter { !Folder.path($0, isInside: snapshot.root.hiddenFolderPaths) }
+        let locked = snapshot.root.visibleTree(includingHidden: false, counting: shown)
+        #expect(locked.find("Work/Projects") == nil)
+        #expect(locked.find("Work")?.totalNoteCount == 1)
+        #expect(locked.totalNoteCount == 2)
+        let unlocked = snapshot.root.visibleTree(includingHidden: true, counting: snapshot.notes.map(\.path))
+        #expect(unlocked.find("Work/Projects")?.isHidden == true)
+        #expect(unlocked.find("Work")?.totalNoteCount == 2)
+    }
+
+    @Test func secretNotesAreListedByNameWithoutReading() throws {
+        let root = try makeRepository()
+        defer { try? FileManager.default.removeItem(at: root) }
+        // Not valid age data: the scanner must not try to read it.
+        try Data([0, 1, 2, 3]).write(to: root.appendingPathComponent("Work/Bank PINs.md.age"))
+        let snapshot = try RepositoryScanner.scan(rootURL: root)
+        let secret = try #require(snapshot.notes.first { $0.path == "Work/Bank PINs.md.age" })
+        #expect(secret.isSecret && secret.title == "Bank PINs" && secret.baseName == "Bank PINs")
+        #expect(secret.fileExtension == "md.age" && secret.body.isEmpty && secret.tags.isEmpty && !secret.isTemplate)
+        #expect(snapshot.root.find("Work")?.noteCount == 2)
+        #expect(NoteSearch.search(SearchQuery("bank"), in: snapshot.notes).map(\.note.path) == ["Work/Bank PINs.md.age"])
+        #expect(NoteMDCore.isNotePath("a/B.MD.AGE") && NoteMDCore.isSecretNotePath("B.md.age") && !NoteMDCore.isSecretNotePath("B.age"))
+        #expect(NoteFileName.baseName(of: "Plan.md") == "Plan" && NoteFileName.baseName(of: "x.md.age") == "x")
+    }
+
     @Test func titles() {
         #expect(NoteTitle.derive(frontMatterTitle: nil, body: "```\n# not\n```\n# Real *one* #", fileName: "f") == "Real one")
         #expect(NoteTitle.derive(frontMatterTitle: " ", body: "no heading", fileName: "file") == "file")

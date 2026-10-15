@@ -60,6 +60,12 @@ struct NoteMDCommands: Commands {
                 if let store, let path = store.editor?.path { store.trashNote(path) }
             }
             .disabled(store?.editor == nil)
+            Divider()
+            Button("Unlock Hidden Notes…") { Task { await AppLock.shared.unlock() } }
+                .disabled(AppLock.shared.isUnlocked || AppLock.shared.isUnlocking)
+            Button("Lock Now") { AppLock.shared.lock() }
+                .keyboardShortcut("l", modifiers: [.command, .control])
+                .disabled(!AppLock.shared.isUnlocked)
         }
         CommandMenu("Note") {
             Button("Use Template…") {
@@ -77,12 +83,17 @@ struct NoteMDCommands: Commands {
                 guard let store, let editor = store.editor else { return }
                 if editor.isTemplate { store.requestConvertToNote(editor.path) } else { store.convertNote(editor.path, toTemplate: true, copy: false) }
             }
-            .disabled(store?.editor == nil)
+            .disabled(store?.editor == nil || store?.editor?.isSecret == true)
             Button(store?.editor?.isTemplate == true ? "Duplicate as Note" : "Duplicate as Template") {
                 guard let store, let editor = store.editor else { return }
                 store.convertNote(editor.path, toTemplate: !editor.isTemplate, copy: true)
             }
-            .disabled(store?.editor == nil)
+            .disabled(store?.editor == nil || store?.editor?.isSecret == true)
+            Button(store?.editor?.isSecret == true ? "Make Not Secret" : "Make Secret…") {
+                guard let store, let editor = store.editor else { return }
+                if editor.isSecret { store.makeNotSecret(editor.path) } else { store.requestMakeSecret(editor.path) }
+            }
+            .disabled(store?.editor == nil || RepositoryLayout.isIncognitoPath(store?.editor?.path ?? ""))
             Divider()
             Button("Version History…") {
                 if let store, let path = store.editor?.path { store.sheet = .history(path: path) }

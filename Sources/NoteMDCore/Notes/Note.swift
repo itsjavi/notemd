@@ -18,9 +18,13 @@ public struct Note: Sendable, Hashable, Identifiable {
     /// Case- and diacritic-folded text used by search.
     let searchTitle: String
     let searchBody: String
+    /// Encrypted on disk (decision-6): known by its file name only, its text is read when it's opened.
+    public let isSecret: Bool
 
     public var fileName: String { (path as NSString).lastPathComponent }
-    public var baseName: String { (fileName as NSString).deletingPathExtension }
+    public var baseName: String { NoteFileName.baseName(of: fileName) }
+    /// `md`, `markdown`, or `md.age` for secret notes.
+    public var fileExtension: String { isSecret ? NoteMDCore.secretNoteExtension : url.pathExtension }
     /// Folder path ("" for the repository root).
     public var folderPath: String {
         let parent = (path as NSString).deletingLastPathComponent
@@ -42,6 +46,25 @@ public struct Note: Sendable, Hashable, Identifiable {
         self.body = markdown.body
         self.searchTitle = SearchFolding.fold(title + " " + baseName)
         self.searchBody = SearchFolding.fold(markdown.body)
+        self.isSecret = false
+    }
+
+    /// A secret note, listed and searched by its file name without reading (or decrypting) it.
+    public init(secretPath path: String, url: URL, modified: Date, created: Date, size: Int) {
+        let baseName = NoteFileName.baseName(of: (path as NSString).lastPathComponent)
+        self.path = path
+        self.url = url
+        self.title = baseName
+        self.tags = []
+        self.isTemplate = false
+        self.excerpt = ""
+        self.modified = modified
+        self.created = created
+        self.size = size
+        self.body = ""
+        self.searchTitle = SearchFolding.fold(baseName)
+        self.searchBody = ""
+        self.isSecret = true
     }
 }
 
@@ -109,6 +132,12 @@ public enum NoteTitle {
 
 /// Builds file names from titles.
 public enum NoteFileName {
+    /// The file name without its note extension (`Plan.md.age` → `Plan`).
+    public static func baseName(of fileName: String) -> String {
+        if NoteMDCore.isSecretNotePath(fileName) { return String(fileName.dropLast(NoteMDCore.secretNoteExtension.count + 1)) }
+        return (fileName as NSString).deletingPathExtension
+    }
+
     /// A Finder-friendly file name (without extension) for a title.
     public static func sanitized(_ title: String, fallback: String = "Untitled") -> String {
         var name = title.replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "-")

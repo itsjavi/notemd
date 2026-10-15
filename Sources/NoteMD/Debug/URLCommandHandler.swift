@@ -66,6 +66,36 @@ enum DebugHooks {
             if let text = query["text"] { pasteboard.setString(text, forType: .string) }
         case "ui/always-open-last":
             AppSettings.shared.alwaysOpenLastRepository = query["value"] == "1"
+        case "ui/translucency":
+            AppSettings.shared.translucentWindows = query["value"] != "0"
+        case "ui/unlock":
+            // As after a successful Touch ID or password prompt.
+            AppLock.shared.unlockWithoutAuthentication()
+        case "ui/lock":
+            AppLock.shared.lock()
+        case "ui/secret-setup":
+            // As the setup sheet finishes, with a software key instead of the Secure Enclave (no prompts). `key=` imports.
+            let identity = query["key"].flatMap { try? AgeIdentity(string: $0) } ?? AgeIdentity()
+            do {
+                try SecretKeyStore.save(identity, testOnly: true)
+                AppLock.shared.didSetUpSecrets(identity)
+            } catch {
+                store?.errorMessage = "secret-setup: \(error)"
+            }
+        case "ui/secret-remove":
+            try? AppLock.shared.removeSecrets()
+        case "ui/make-secret":
+            // `value=0` makes it a plain note again; `confirm=1` only shows the Make Secret confirmation.
+            guard let store, let path = query["note"] else { return }
+            if query["value"] == "0" { store.makeNotSecret(path) }
+            else if query["confirm"] == "1" { store.requestMakeSecret(path) }
+            else { store.makeSecret(path) }
+        case "ui/lock-after":
+            if let seconds = Double(query["seconds"] ?? ""), seconds >= 1 { AppSettings.shared.lockAfter = min(seconds, 300) }
+        case "ui/hide-folder":
+            // `value=0` shows it again; hiding goes through the first-time explanation unless `confirm=0`.
+            guard let store, let path = query["path"] else { return }
+            store.setFolderHidden(path, query["value"] != "0", confirmed: query["confirm"] == "0")
         case "ui/settings":
             // Same path as the app menu's Settings… item.
             if let item = NSApp.mainMenu?.items.first?.submenu?.items.first(where: { $0.keyEquivalent == "," }), let action = item.action {
@@ -126,6 +156,7 @@ enum DebugHooks {
             case "rename-asset": store.sheet = .renameAsset(path: path)
             case "folder-new": store.beginCreateFolder(in: query["parent"] ?? "")
             case "folder-edit": store.beginEditFolder(path)
+            case "secret-setup": store.sheet = .secretSetup
             default: break
             }
         case "ui/close-sheet":
@@ -140,8 +171,8 @@ enum DebugHooks {
             guard let store, let path = query["path"], let revision = query["rev"] else { return }
             Task {
                 do {
-                    guard let git = store.git else { store.errorMessage = "restore: no git"; return }
-                    guard let content = try await git.content(of: store.gitPath(path), at: revision) else { store.errorMessage = "restore: no content"; return }
+                    guard store.git != nil else { store.errorMessage = "restore: no git"; return }
+                    guard let content = try await store.historyText(of: store.gitPath(path), at: revision) else { store.errorMessage = "restore: no content"; return }
                     await store.restore(path: path, content: content, revision: revision)
                 } catch {
                     store.errorMessage = "restore: \(error)"
@@ -455,11 +486,16 @@ enum DebugHooks {
         lines.append("windowFrames: \(NSApp.windows.filter(\.isVisible).map { "\($0.title)=\(NSStringFromRect($0.frame)) on \(NSStringFromRect($0.screen?.visibleFrame ?? .zero))" })")
         lines.append("pendingImport: \(windows.pendingImport.map(\.path))")
         lines.append("alwaysOpenLast: \(AppSettings.shared.alwaysOpenLastRepository)")
+        lines.append("translucentWindows: \(AppSettings.shared.translucentWindows)")
         if let store {
             lines.append("store: \(store.displayPath)")
             lines.append("loaded: \(store.isLoaded)")
             lines.append("notes: \(store.notes.count)")
-            lines.append("folders: \(store.root.descendants.map { "\($0.path)[\($0.appearance.icon ?? "-"),\($0.appearance.color?.rawValue ?? "-")]" })")
+            lines.append("folders: \(store.root.descendants.map { "\($0.path)[\($0.appearance.icon ?? "-"),\($0.appearance.color?.rawValue ?? "-")\($0.isHidden ? ",hidden" : "")]=\($0.totalNoteCount)" })")
+            lines.append("lock: \(AppLock.shared.isUnlocked ? "unlocked" : "locked") inUse: \(AppLock.shared.isInUse) lockAfter: \(AppSettings.shared.lockAfter)")
+            lines.append("hiddenFolders: \(store.hiddenFolderPaths) pendingHide: \(store.folderPendingHide ?? "-")")
+            lines.append("allNotes: \(store.allNotes.count) secretNotes: \(store.allNotes.filter(\.isSecret).map(\.path).sorted().prefix(20))")
+            lines.append("secrets: setUp=\(AppLock.shared.secretsSetUp) recipient=\(SecretKeyStore.recipient?.string ?? "-") identity=\(AppLock.shared.identity != nil) decryptions=\(SecretNotes.decryptions) unencryptedWarnings=\(SecretNotes.unencryptedWarnings) pendingSecret=\(store.notePendingSecret ?? "-")")
             lines.append("tags: \(store.tags.map { "\($0.tag)=\($0.count)" })")
             lines.append("sidebar: \(String(describing: store.sidebarSelection))")
             lines.append("search: \(store.searchText)")
@@ -484,6 +520,7 @@ enum DebugHooks {
                 lines.append("editor.path: \(editor.path)")
                 lines.append("editor.title: \(editor.title)")
                 lines.append("editor.dirty: \(editor.isDirty)")
+                lines.append("editor.secret: \(editor.isSecret)")
                 lines.append("editor.tags: \(editor.tags)")
                 lines.append("editor.params: \(editor.parameters.map { "\($0.name):\($0.type.rawValue)" })")
                 lines.append("editor.text: \(editor.fullText.prefix(4000).debugDescription)")

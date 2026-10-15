@@ -41,6 +41,12 @@ result. Voice notes and video reviews came next, because some thoughts are faste
   layout.
 - **Incognito notes.** Jot something down without a trace (⌃⌘N): incognito notes get their own sidebar section, are
   never committed and are deleted when you close the window or quit. Move one into a folder to keep it.
+- **Hidden folders and secret notes.** Hide a folder to keep it, its notes and their tags out of sight until you unlock
+  NoteMD with Touch ID, an Apple Watch or your password (hiding isn't encryption: the files stay readable in Finder).
+  Make a note secret to encrypt it on disk in the open [age](https://age-encryption.org) format: it's listed by file
+  name only while NoteMD is unlocked and decrypted when you open it, so copies, backups and git remotes never hold its
+  text. A recovery key, shown once at setup, opens secret notes on another Mac or with `age -d`. NoteMD locks again
+  after up to five idle minutes, with Lock Now (⌃⌘L), screen lock, sleep or quit.
 - **Versioned automatically.** Edits are saved as you type and committed a few seconds after you stop (configurable),
   when you close the window, on quit and with ⌘S. Version History shows what changed in each version, compares any of
   them with the current text and restores one as a new commit. Deleted notes can be restored too.

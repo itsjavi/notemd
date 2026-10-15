@@ -57,6 +57,8 @@ enum RepositorySheet: Identifiable {
     /// Transcribe the clip `source` (link destination as written) embedded in the note at `path`.
     case transcribe(path: String, source: String)
     case renameAsset(path: String)
+    /// First setup of secret notes, or importing a recovery key.
+    case secretSetup
 
     var id: String {
         switch self {
@@ -67,6 +69,20 @@ enum RepositorySheet: Identifiable {
         case .templateParameters(let path): "params:" + path
         case .transcribe(let path, let source): "transcribe:" + path + ":" + source
         case .renameAsset(let path): "rename-asset:" + path
+        case .secretSetup: "secret-setup"
+        }
+    }
+
+    /// The note or folder the sheet is about, closed with it when NoteMD locks.
+    var notePath: String? {
+        switch self {
+        case .renameNote(let path), .history(let path), .templateForm(let path), .templateParameters(let path), .transcribe(let path, _): path
+        case .folder(let draft):
+            switch draft.mode {
+            case .create(let parent): parent
+            case .edit(let path): path
+            }
+        case .renameAsset, .secretSetup: nil
         }
     }
 }
@@ -93,9 +109,25 @@ enum GitState: Equatable {
     var contentURL: URL { layout.contentURL(in: rootURL) }
     let settings = AppSettings.shared
 
+    /// The folder tree as shown: without hidden folders while NoteMD is locked, counting the notes that are listed.
     private(set) var root: Folder
-    /// Versioned notes. Incognito notes are kept apart, so lists, tags and the asset index never see them.
-    private(set) var notes: [Note] = []
+    /// The tree as scanned, hidden folders included.
+    @ObservationIgnored private var scannedRoot: Folder
+    /// Folders marked hidden (decision-6): they, their sub-folders and their notes only show while NoteMD is unlocked.
+    private(set) var hiddenFolderPaths: [String] = []
+    /// Hidden folders or secret notes exist, so the lock matters here.
+    private(set) var hasPrivateContent = false
+    /// Versioned notes, plain and secret, hidden ones included. Incognito notes are kept apart, so lists, tags and the
+    /// asset index never see them.
+    private(set) var allNotes: [Note] = []
+    /// The notes shown: notes in hidden folders and secret notes are left out while NoteMD is locked.
+    var notes: [Note] {
+        hasPrivateContent && isLocked ? allNotes.filter { !isConcealed($0.path) } : allNotes
+    }
+    /// A folder waiting for the explanation shown the first time a folder is hidden.
+    var folderPendingHide: String?
+    /// A note waiting for the Make Secret confirmation (its history stays readable).
+    var notePendingSecret: String?
     /// Notes in `.incognito/` (TASK-47): never committed, deleted when the repository closes.
     private(set) var incognitoNotes: [Note] = []
     /// An incognito note waiting for the delete-for-good confirmation.
@@ -173,12 +205,17 @@ enum GitState: Equatable {
     init(rootURL: URL) {
         self.rootURL = rootURL.canonical
         layout = RepositoryVetting.isTopLevel(self.rootURL) ? .root : .existing(at: self.rootURL)
-        root = Folder(path: "", name: rootURL.lastPathComponent, appearance: FolderAppearance.load(from: layout.contentURL(in: self.rootURL)))
+        let root = Folder(path: "", name: rootURL.lastPathComponent, appearance: FolderAppearance.load(from: layout.contentURL(in: self.rootURL)))
+        self.root = root
+        scannedRoot = root
     }
 
     // MARK: Lifecycle
 
     func start() {
+        NotificationCenter.default.addObserver(forName: .appLockChanged, object: nil, queue: .main) { [weak self] _ in
+            MainActor.assumeIsolated { self?.lockStateChanged() }
+        }
         Task {
             await prepareLayout()
             guard !isClosed else { return }
@@ -204,6 +241,7 @@ enum GitState: Equatable {
             errorMessage = "Couldn't move the notes into “\(RepositoryLayout.filesFolderName)”: \(error.localizedDescription)"
         }
         root = Folder(path: "", name: name, appearance: FolderAppearance.load(from: contentURL))
+        scannedRoot = root
     }
 
     /// Saves the open note, applies an automatic name, commits everything pending and discards incognito notes.
@@ -273,17 +311,108 @@ enum GitState: Equatable {
     }
 
     private func apply(_ snapshot: RepositorySnapshot) {
-        root = snapshot.root
-        notes = snapshot.notes
+        scannedRoot = snapshot.root
+        allNotes = snapshot.notes
         notesByPath = Dictionary((snapshot.notes + incognitoNotes).map { ($0.path, $0) }, uniquingKeysWith: { first, _ in first })
-        tags = snapshot.allTags.map { TagCount(tag: $0.tag, count: $0.count) }
+        refreshPrivateState()
         isLoaded = true
         if case .folder(let path) = sidebarSelection, root.find(path) == nil { sidebarSelection = .allNotes }
+        // A folder hidden meanwhile (here, in another window or by a pull) takes its open note with it.
+        closeConcealedContent()
         refreshVisibleNotes()
         reconcileOpenNote()
         let waiting = afterLoad
         afterLoad = []
         waiting.forEach { $0() }
+    }
+
+    // MARK: Hidden folders and secret notes (decision-6)
+
+    var isLocked: Bool { !AppLock.shared.isUnlocked }
+
+    /// Whether the note or folder at `path` is kept off the screen right now: secret or in a hidden folder, while
+    /// NoteMD is locked.
+    func isConcealed(_ path: String) -> Bool {
+        isLocked && (NoteMDCore.isSecretNotePath(path) || Folder.path(path, isInside: hiddenFolderPaths))
+    }
+
+    /// Recomputes what depends on the lock: the shown tree and its counts, and the tags of the shown notes.
+    private func refreshPrivateState() {
+        hiddenFolderPaths = scannedRoot.hiddenFolderPaths
+        hasPrivateContent = !hiddenFolderPaths.isEmpty || allNotes.contains(where: \.isSecret)
+        if hasPrivateContent && !AppLock.shared.isInUse { AppLock.shared.isInUse = true }
+        let shown = notes
+        root = scannedRoot.visibleTree(includingHidden: !isLocked, counting: shown.map(\.path))
+        tags = RepositorySnapshot(root: root, notes: shown).allTags.map { TagCount(tag: $0.tag, count: $0.count) }
+    }
+
+    private func lockStateChanged() {
+        refreshPrivateState()
+        if isLocked {
+            closeConcealedContent()
+        } else if sidebarSelection == .recentlyDeleted {
+            Task { await loadDeletedFiles() }
+        }
+        refreshVisibleNotes()
+    }
+
+    /// Closes and deselects whatever is concealed now: the open note (saved first), sheets about it, a hidden folder
+    /// or a tag only hidden notes have, and listed deletions.
+    private func closeConcealedContent() {
+        guard isLocked else { return }
+        if let editor, isConcealed(editor.path) {
+            editor.save()
+            self.editor = nil
+        }
+        if let selectedNoteID, isConcealed(selectedNoteID) { self.selectedNoteID = nil }
+        if let sheet, let path = sheet.notePath, isConcealed(path) { self.sheet = nil }
+        switch sidebarSelection {
+        case .folder(let path) where isConcealed(path) || root.find(path) == nil:
+            sidebarSelection = .allNotes
+        case .tag(let tag) where !tags.contains(where: { $0.tag.caseInsensitiveCompare(tag) == .orderedSame || $0.tag.lowercased().hasPrefix(tag.lowercased() + "/") }):
+            sidebarSelection = .allNotes
+        default:
+            break
+        }
+        deletedFiles.removeAll { isConcealed($0.path) }
+        if let selectedDeletedPath, isConcealed(selectedDeletedPath) { self.selectedDeletedPath = nil }
+        if let attachmentsPopoverNote, isConcealed(attachmentsPopoverNote) { self.attachmentsPopoverNote = nil }
+        if let notePendingSecret, isConcealed(notePendingSecret) { self.notePendingSecret = nil }
+    }
+
+    /// Hides a folder or shows it again. The first time a folder is hidden, the explanation comes first.
+    func setFolderHidden(_ path: String, _ hidden: Bool, confirmed: Bool = false) {
+        guard !path.isEmpty, let folder = scannedRoot.find(path) else { return }
+        if hidden && !confirmed && !UserDefaults.standard.bool(forKey: Self.explainedHidingKey) {
+            folderPendingHide = path
+            return
+        }
+        if folderPendingHide == path { folderPendingHide = nil }
+        var appearance = folder.appearance
+        appearance.hidden = hidden
+        do {
+            try appearance.save(to: url(forFolder: path))
+        } catch {
+            errorMessage = "Couldn't \(hidden ? "hide" : "show") the folder: \(error.localizedDescription)"
+            return
+        }
+        if hidden { didHideFolder() }
+        autoCommitter?.markDirty()
+        updatePendingState()
+        Task { await reload() }
+    }
+
+    static let explainedHidingKey = "explainedHiddenFolders"
+
+    private func didHideFolder() {
+        UserDefaults.standard.set(true, forKey: Self.explainedHidingKey)
+        AppLock.shared.isInUse = true
+    }
+
+    /// The notes among `paths` that can be named on screen, and how many others are hidden right now.
+    func shownNotes(_ paths: [String]) -> (shown: [String], hidden: Int) {
+        let shown = paths.filter { !isConcealed($0) }
+        return (shown, paths.count - shown.count)
     }
 
     /// Runs `action` now if the notes are loaded, otherwise right after the first scan.
@@ -334,7 +463,7 @@ enum GitState: Equatable {
             }
             return
         }
-        guard let diskText = RepositoryScanner.readText(editor.url), !editor.isOwnWrite(diskText) else { return }
+        guard let diskText = readNoteText(editor.path), !editor.isOwnWrite(diskText) else { return }
         if !editor.isDirty {
             editor.replaceText(diskText, markSaved: true)
         } else {
@@ -346,10 +475,11 @@ enum GitState: Equatable {
     private func saveConflictCopy(of editor: NoteEditor, diskText: String) {
         let stamp = Date().formatted(.dateTime.year().month(.twoDigits).day(.twoDigits).hour(.twoDigits(amPM: .omitted)).minute(.twoDigits))
             .replacingOccurrences(of: "/", with: "-").replacingOccurrences(of: ":", with: "")
-        let base = (editor.url.lastPathComponent as NSString).deletingPathExtension + " (changed elsewhere \(stamp))"
-        let target = NoteFileName.uniqueURL(in: editor.url.deletingLastPathComponent(), base: base, pathExtension: editor.url.pathExtension)
+        let base = NoteFileName.baseName(of: editor.url.lastPathComponent) + " (changed elsewhere \(stamp))"
+        let pathExtension = editor.isSecret ? NoteMDCore.secretNoteExtension : editor.url.pathExtension
+        let target = NoteFileName.uniqueURL(in: editor.url.deletingLastPathComponent(), base: base, pathExtension: pathExtension)
         do {
-            try Data(diskText.utf8).write(to: target, options: .withoutOverwriting)
+            try noteData(diskText, forPath: target.lastPathComponent).write(to: target, options: .withoutOverwriting)
             errorMessage = "“\(editor.title)” was changed by another app while you were editing. Your version is kept; the other one was saved as “\(target.lastPathComponent)”."
         } catch {
             errorMessage = "“\(editor.title)” was changed by another app while you were editing, and the other version couldn't be saved: \(error.localizedDescription)"
@@ -411,7 +541,8 @@ enum GitState: Equatable {
         }
     }
 
-    func note(at path: String) -> Note? { notesByPath[path] }
+    /// The note at `path`, unless it's concealed while NoteMD is locked.
+    func note(at path: String) -> Note? { isConcealed(path) ? nil : notesByPath[path] }
 
     /// The folder new notes go into for the current selection.
     var targetFolderPath: String {
@@ -437,12 +568,19 @@ enum GitState: Equatable {
             editor = nil
             return
         }
-        guard let text = RepositoryScanner.readText(note.url) else {
-            errorMessage = "Couldn't open “\(note.fileName)”."
+        guard let text = readNoteText(note.path) else {
+            if !note.isSecret {
+                errorMessage = "Couldn't open “\(note.fileName)”."
+            } else if AppLock.shared.identity == nil {
+                errorMessage = "“\(note.title)” is a secret note. Set up secret notes with your recovery key in Settings › General to open it on this Mac."
+            } else {
+                errorMessage = "Couldn't decrypt “\(note.fileName)”. It may be damaged, or encrypted with another recovery key."
+            }
             editor = nil
             return
         }
-        let editor = NoteEditor(path: note.path, url: note.url, text: text, showsFrontMatter: settings.showFrontMatter)
+        let recipient = note.isSecret ? AppLock.shared.identity?.recipient : nil
+        let editor = NoteEditor(path: note.path, url: note.url, text: text, showsFrontMatter: settings.showFrontMatter, secretRecipient: recipient)
         editor.onSave = { [weak self] editor in self?.noteSaved(editor) }
         editor.onSaveError = { [weak self] error in self?.errorMessage = "Couldn't save the note: \(error.localizedDescription)" }
         self.editor = editor
@@ -459,9 +597,15 @@ enum GitState: Equatable {
 
     func scanSingle(_ path: String) -> Note? {
         let url = fileURL(for: path)
-        guard let text = RepositoryScanner.readText(url) else { return nil }
         let values = try? url.resourceValues(forKeys: [.contentModificationDateKey, .creationDateKey, .fileSizeKey])
-        let note = Note(path: path, url: url, text: text, modified: values?.contentModificationDate ?? Date(), created: values?.creationDate ?? Date(), size: values?.fileSize ?? 0)
+        let note: Note
+        if NoteMDCore.isSecretNotePath(path) {
+            guard FileManager.default.fileExists(atPath: url.path) else { return nil }
+            note = Note(secretPath: path, url: url, modified: values?.contentModificationDate ?? Date(), created: values?.creationDate ?? Date(), size: values?.fileSize ?? 0)
+        } else {
+            guard let text = RepositoryScanner.readText(url) else { return nil }
+            note = Note(path: path, url: url, text: text, modified: values?.contentModificationDate ?? Date(), created: values?.creationDate ?? Date(), size: values?.fileSize ?? 0)
+        }
         upsert(note)
         return note
     }
@@ -477,17 +621,17 @@ enum GitState: Equatable {
             return
         }
         assetIndex.update(notePath: note.path, body: note.body, rootPath: contentURL.path)
-        if let index = notes.firstIndex(where: { $0.path == note.path }) {
-            notes[index] = note
+        if let index = allNotes.firstIndex(where: { $0.path == note.path }) {
+            allNotes[index] = note
         } else {
-            notes.append(note)
+            allNotes.append(note)
         }
     }
 
     /// Forgets the note at `path` (its file is gone or moved).
     private func removeNote(_ path: String) {
         notesByPath[path] = nil
-        notes.removeAll { $0.path == path }
+        allNotes.removeAll { $0.path == path }
         incognitoNotes.removeAll { $0.path == path }
         assetIndex.remove(notePath: path)
     }
@@ -495,7 +639,11 @@ enum GitState: Equatable {
     private func noteSaved(_ editor: NoteEditor) {
         let values = try? editor.url.resourceValues(forKeys: [.contentModificationDateKey, .fileSizeKey])
         let previous = notesByPath[editor.path]
-        let note = Note(path: editor.path, url: editor.url, text: editor.fullText, modified: values?.contentModificationDate ?? Date(), created: previous?.created ?? Date(), size: values?.fileSize ?? 0)
+        let modified = values?.contentModificationDate ?? Date()
+        // A secret note stays known by its file name: its text never reaches lists, search or tags.
+        let note = editor.isSecret
+            ? Note(secretPath: editor.path, url: editor.url, modified: modified, created: previous?.created ?? Date(), size: values?.fileSize ?? 0)
+            : Note(path: editor.path, url: editor.url, text: editor.fullText, modified: modified, created: previous?.created ?? Date(), size: values?.fileSize ?? 0)
         upsert(note)
         refreshVisibleNotes()
         guard !RepositoryLayout.isIncognitoPath(note.path) else { return }
@@ -513,7 +661,7 @@ enum GitState: Equatable {
         guard title != note.baseName, !NoteFileName.isUntitled(title), title != "Untitled" else { return }
         let base = NoteFileName.sanitized(title)
         let directory = note.url.deletingLastPathComponent()
-        let target = NoteFileName.uniqueURL(in: directory, base: base, pathExtension: note.url.pathExtension, excluding: note.url)
+        let target = NoteFileName.uniqueURL(in: directory, base: base, pathExtension: note.fileExtension, excluding: note.url)
         do {
             try FileManager.default.moveItem(at: note.url, to: target)
             let newPath = relativePath(of: target)
@@ -616,7 +764,7 @@ enum GitState: Equatable {
     func renameNote(_ path: String, to newName: String) {
         guard let note = notesByPath[path] else { return }
         let base = NoteFileName.sanitized(newName, fallback: note.baseName)
-        let target = NoteFileName.uniqueURL(in: note.url.deletingLastPathComponent(), base: base, pathExtension: note.url.pathExtension, excluding: note.url)
+        let target = NoteFileName.uniqueURL(in: note.url.deletingLastPathComponent(), base: base, pathExtension: note.fileExtension, excluding: note.url)
         guard target.standardizedFileURL != note.url.standardizedFileURL else { return }
         move(note: note, to: target)
     }
@@ -627,7 +775,7 @@ enum GitState: Equatable {
         let keeps = RepositoryLayout.isIncognitoPath(path)
         let kept = keeps ? keepIncognitoAttachments(ofNoteAt: path) : nil
         guard let note = notesByPath[path] else { return }
-        let target = NoteFileName.uniqueURL(in: url(forFolder: folderPath), base: note.baseName, pathExtension: note.url.pathExtension)
+        let target = NoteFileName.uniqueURL(in: url(forFolder: folderPath), base: note.baseName, pathExtension: note.fileExtension)
         guard move(note: note, to: target) else {
             // The note stays incognito: so do its attachments.
             if let kept { undoKeepingAttachments(kept, ofNoteAt: path) }
@@ -681,7 +829,7 @@ enum GitState: Equatable {
             editor.replaceText(text, markSaved: false)
             editor.save()
         } else {
-            try? SafeFileWriter.write(Data(text.utf8), to: fileURL(for: path))
+            if let data = try? noteData(text, forPath: path) { try? SafeFileWriter.write(data, to: fileURL(for: path)) }
             _ = scanSingle(path)
         }
     }
@@ -720,10 +868,12 @@ enum GitState: Equatable {
     }
 
     func duplicateNote(_ path: String) {
-        guard let note = notesByPath[path], let text = RepositoryScanner.readText(note.url) else { return }
-        let target = NoteFileName.uniqueURL(in: note.url.deletingLastPathComponent(), base: note.baseName + " copy", pathExtension: note.url.pathExtension)
+        guard let note = notesByPath[path] else { return }
+        let target = NoteFileName.uniqueURL(in: note.url.deletingLastPathComponent(), base: note.baseName + " copy", pathExtension: note.fileExtension)
         do {
-            try Data(text.utf8).write(to: target, options: .withoutOverwriting)
+            editor?.save()
+            // The file's bytes: a secret note's copy stays encrypted. A new file, so it gets its own creation date.
+            try Data(contentsOf: note.url).write(to: target, options: .withoutOverwriting)
         } catch {
             errorMessage = "Couldn't duplicate the note: \(error.localizedDescription)"
             return
@@ -809,6 +959,8 @@ enum GitState: Equatable {
 
     func commitFolder(_ draft: FolderDraft) {
         let name = NoteFileName.sanitized(draft.name, fallback: "New Folder")
+        // The sheet explains hiding next to its toggle.
+        if draft.appearance.hidden { didHideFolder() }
         switch draft.mode {
         case .create(let parent):
             let target = NoteFileName.uniqueURL(in: url(forFolder: parent), base: name, pathExtension: nil)
@@ -860,7 +1012,7 @@ enum GitState: Equatable {
         let source = url(forFolder: path)
         let target = NoteFileName.uniqueURL(in: url(forFolder: parent), base: source.lastPathComponent, pathExtension: nil)
         editor?.save()
-        let movedNotes = notes.filter { $0.path.hasPrefix(path + "/") }
+        let movedNotes = allNotes.filter { $0.path.hasPrefix(path + "/") }
         do {
             try FileManager.default.moveItem(at: source, to: target)
         } catch {
@@ -887,11 +1039,11 @@ enum GitState: Equatable {
             return
         }
         let url = fileURL(for: path)
-        guard let text = RepositoryScanner.readText(url) else { return }
+        guard let text = readNoteText(path) else { return }
         let updated = Attachments.rewritingAssetLinks(in: text, fromDirectory: oldDirectory, toDirectory: newDirectory)
         guard updated != text else { return }
         do {
-            try SafeFileWriter.write(Data(updated.utf8), to: url)
+            try SafeFileWriter.write(noteData(updated, forPath: path), to: url)
         } catch {
             errorMessage = "Couldn't update the attachment links in “\(url.lastPathComponent)”: \(error.localizedDescription)"
         }
@@ -1085,7 +1237,18 @@ enum GitState: Equatable {
 
     /// Copies or links files into the note at `path` (drops, pastes, recordings).
     func attachmentImporter(forNoteAt path: String) -> AttachmentImporter {
-        attachmentImporter(forFolder: (path as NSString).deletingLastPathComponent)
+        var importer = attachmentImporter(forFolder: (path as NSString).deletingLastPathComponent)
+        if NoteMDCore.isSecretNotePath(path) { importer.secretNoteName = NoteFileName.baseName(of: (path as NSString).lastPathComponent) }
+        return importer
+    }
+
+    /// Make Secret: asks to confirm (earlier versions stay in history), or sets secret notes up first.
+    func requestMakeSecret(_ path: String) {
+        guard AppLock.shared.secretsSetUp else {
+            sheet = .secretSetup
+            return
+        }
+        notePendingSecret = path
     }
 
     /// Copies or links files for notes in the folder at `folderPath` ("" for the root). Incognito notes get their own
@@ -1112,14 +1275,14 @@ enum GitState: Equatable {
             return
         }
         let url = fileURL(for: path)
-        guard RepositoryLayout.isSafeNotePath(path), let current = RepositoryScanner.readText(url) else {
+        guard RepositoryLayout.isSafeNotePath(path), let current = readNoteText(path) else {
             errorMessage = "Couldn't update “\((path as NSString).lastPathComponent)”: the note is gone."
             return
         }
         let ns = current as NSString
         let updated = ns.replacingCharacters(in: Self.clamp(range, to: ns.length, minimum: 0), with: text)
         do {
-            try SafeFileWriter.write(Data(updated.utf8), to: url)
+            try SafeFileWriter.write(noteData(updated, forPath: path), to: url)
         } catch {
             errorMessage = "Couldn't update “\(url.lastPathComponent)”: \(error.localizedDescription)"
             return
@@ -1142,7 +1305,88 @@ enum GitState: Equatable {
     /// Full text of the note at `path`: the editor's when it's open, else the file's.
     func currentText(ofNoteAt path: String) -> String? {
         if let editor, editor.path == path { return editor.fullText }
-        return RepositoryScanner.readText(fileURL(for: path))
+        return readNoteText(path)
+    }
+
+    // MARK: Note files (secret notes are decrypted and encrypted here)
+
+    /// The text of the note file at `path`: decrypted for secret notes (nil while locked), otherwise read as text.
+    func readNoteText(_ path: String) -> String? {
+        let url = fileURL(for: path)
+        guard NoteMDCore.isSecretNotePath(path) else { return RepositoryScanner.readText(url) }
+        guard let identity = AppLock.shared.identity, let data = try? Data(contentsOf: url) else { return nil }
+        return SecretNotes.decrypt(data, with: identity)
+    }
+
+    /// The bytes to write for `text` at `path`: age-encrypted for secret notes, so their plaintext never reaches disk.
+    func noteData(_ text: String, forPath path: String) throws -> Data {
+        guard NoteMDCore.isSecretNotePath(path) else { return Data(text.utf8) }
+        guard let recipient = AppLock.shared.identity?.recipient ?? SecretKeyStore.recipient else { throw SecretKeyStore.Failure.notSetUp }
+        return try Age.encrypt(Data(text.utf8), to: [recipient])
+    }
+
+    /// A version of a note from git, by its git path: decrypted for secret notes (nil while locked or when it can't be).
+    func historyText(of gitPath: String, at revision: String) async throws -> String? {
+        guard let git, let data = try await git.data(of: gitPath, at: revision) else { return nil }
+        guard NoteMDCore.isSecretNotePath(gitPath) else { return String(decoding: data, as: UTF8.self) }
+        guard let identity = AppLock.shared.identity else { return nil }
+        return SecretNotes.decrypt(data, with: identity)
+    }
+
+    /// Encrypts a note into `Name.md.age` and deletes the plain file. Earlier versions stay readable in git history.
+    func makeSecret(_ path: String) {
+        guard let note = notesByPath[path], !note.isSecret, !RepositoryLayout.isIncognitoPath(path) else { return }
+        guard let recipient = AppLock.shared.identity?.recipient ?? SecretKeyStore.recipient else {
+            sheet = .secretSetup
+            return
+        }
+        if notePendingSecret == path { notePendingSecret = nil }
+        if let editor, editor.path == path { editor.save() }
+        guard let text = currentText(ofNoteAt: path) else { return }
+        let target = NoteFileName.uniqueURL(in: note.url.deletingLastPathComponent(), base: note.baseName, pathExtension: NoteMDCore.secretNoteExtension)
+        do {
+            replaceFile(of: note, with: target, data: try Age.encrypt(Data(text.utf8), to: [recipient]))
+        } catch {
+            errorMessage = "Couldn't encrypt “\(note.title)”: \(error.localizedDescription)"
+        }
+    }
+
+    /// Decrypts a secret note back into a plain Markdown file.
+    func makeNotSecret(_ path: String) {
+        guard let note = notesByPath[path], note.isSecret else { return }
+        if let editor, editor.path == path { editor.save() }
+        guard let text = currentText(ofNoteAt: path) else { return }
+        let target = NoteFileName.uniqueURL(in: note.url.deletingLastPathComponent(), base: note.baseName, pathExtension: "md")
+        replaceFile(of: note, with: target, data: Data(text.utf8))
+    }
+
+    /// Writes `data` as the note's new file and deletes the old one for good (a plain copy in the Bin would defeat
+    /// making it secret). The note stays selected and open.
+    private func replaceFile(of note: Note, with target: URL, data: Data) {
+        let wasSelected = selectedNoteID == note.path
+        do {
+            try data.write(to: target, options: .withoutOverwriting)
+        } catch {
+            errorMessage = "Couldn't write “\(target.lastPathComponent)”: \(error.localizedDescription)"
+            return
+        }
+        do {
+            try FileManager.default.removeItem(at: note.url)
+        } catch {
+            try? FileManager.default.removeItem(at: target)
+            errorMessage = "Couldn't replace “\(note.fileName)”: \(error.localizedDescription)"
+            return
+        }
+        if editor?.path == note.path { editor = nil }
+        removeNote(note.path)
+        let newPath = relativePath(of: target)
+        _ = scanSingle(newPath)
+        refreshPrivateState()
+        refreshVisibleNotes()
+        if wasSelected { selectedNoteID = newPath }
+        autoCommitter?.markDirty()
+        updatePendingState()
+        Task { await reload() }
     }
 
     // MARK: Voice notes
@@ -1158,6 +1402,10 @@ enum GitState: Equatable {
         let path = editor.path
         let offset = (editor.textBridge.selectedLocation ?? (editor.editorText as NSString).length) + editor.hiddenPrefixLength
         let importer = attachmentImporter(forNoteAt: path)
+        guard importer.confirmsUnencrypted() else {
+            showsVoiceRecorder = false
+            return
+        }
         guard let url = importer.newAssetURL(fileName: Attachments.timestampedName(prefix: "voice", pathExtension: "m4a")) else { return }
         voiceRecorder.start(saving: url) { [weak self] event in
             guard let self else { return }
@@ -1199,7 +1447,7 @@ enum GitState: Equatable {
 
     /// The note embedding a file named `fileName`: the open note, then `path`, then any other note.
     private func notePath(embedding fileName: String, preferring path: String) -> (String, (embed: NSRange, label: NSRange))? {
-        var candidates = [path] + notes.map(\.path).filter { $0 != path }
+        var candidates = [path] + allNotes.filter { !$0.isSecret }.map(\.path).filter { $0 != path }
         if let open = editor?.path { candidates.insert(open, at: 0) }
         for candidate in candidates {
             guard let text = currentText(ofNoteAt: candidate), text.contains(fileName),
@@ -1260,9 +1508,13 @@ enum GitState: Equatable {
         }
     }
 
-    /// Shows a note in All Notes and opens it, once the notes are loaded.
+    /// Shows a note in All Notes and opens it, once the notes are loaded. A hidden or secret note asks to unlock first.
     func selectNote(_ path: String) {
         whenLoaded { [self] in
+            if isConcealed(path), notesByPath[path] != nil {
+                Task { if await AppLock.shared.unlock() { selectNote(path) } }
+                return
+            }
             guard note(at: path) != nil else { return }
             searchText = ""
             sidebarSelection = .allNotes
@@ -1308,7 +1560,7 @@ enum GitState: Equatable {
         let url = fileURL(for: path)
         do {
             try FileManager.default.createDirectory(at: url.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try SafeFileWriter.write(Data(content.utf8), to: url)
+            try SafeFileWriter.write(noteData(content, forPath: path), to: url)
         } catch {
             errorMessage = "Couldn't restore the note: \(error.localizedDescription)"
             return
@@ -1332,11 +1584,15 @@ enum GitState: Equatable {
             guard let path = layout.contentPath(forRepositoryPath: file.path), seen.insert(path).inserted else { return nil }
             return file.relocated(to: path)
         }
+        // A note made secret (or plain again) wasn't deleted: its other file is still there. Listing it would also let
+        // anyone preview a secret note's old plaintext while NoteMD is locked.
+        let twins = notesByPath.keys.map { NoteMDCore.isSecretNotePath($0) ? String($0.dropLast(4)) : $0 + ".age" }
         // Assets are listed too; one that is back on disk isn't deleted any more.
-        let existing = Set(notesByPath.keys).union(files.map(\.path).filter {
+        let existing = Set(notesByPath.keys).union(twins).union(files.map(\.path).filter {
             RecentlyDeleted.isAsset($0) && FileManager.default.fileExists(atPath: fileURL(for: $0).path)
         })
         deletedFiles = RecentlyDeleted.visible(files, cleared: clearedDeletions, existingPaths: existing, includingAssets: true)
+            .filter { !isConcealed($0.path) }
     }
 
     /// Hides every listed deletion, loading the list first when Recently Deleted hasn't been opened yet.
@@ -1407,17 +1663,20 @@ enum GitState: Equatable {
             await restoreDeletedAssets([file])
             return
         }
-        guard let git, let content = try? await git.content(of: file.repositoryPath, at: file.lastRevision) else {
+        guard let git, let data = try? await git.data(of: file.repositoryPath, at: file.lastRevision) else {
             errorMessage = "Couldn't read the deleted note from history."
             return
         }
         let original = fileURL(for: file.path)
+        let isSecret = NoteMDCore.isSecretNotePath(file.path)
         let target = FileManager.default.fileExists(atPath: original.path)
-            ? NoteFileName.uniqueURL(in: original.deletingLastPathComponent(), base: (original.lastPathComponent as NSString).deletingPathExtension, pathExtension: original.pathExtension)
+            ? NoteFileName.uniqueURL(in: original.deletingLastPathComponent(), base: NoteFileName.baseName(of: original.lastPathComponent), pathExtension: isSecret ? NoteMDCore.secretNoteExtension : original.pathExtension)
             : original
+        // Secret notes come back as they were stored: encrypted.
+        let content = isSecret ? "" : String(decoding: data, as: UTF8.self)
         do {
             try FileManager.default.createDirectory(at: target.deletingLastPathComponent(), withIntermediateDirectories: true)
-            try Data(content.utf8).write(to: target, options: .withoutOverwriting)
+            try data.write(to: target, options: .withoutOverwriting)
         } catch {
             errorMessage = "Couldn't restore the note: \(error.localizedDescription)"
             return

@@ -53,6 +53,15 @@ struct FolderSheet: View {
                             ForEach(FolderIcons.all, id: \.self) { iconButton($0) }
                         }
                     }
+                    if !isRoot {
+                        section("Privacy") {
+                            Toggle("Hide this folder", isOn: $draft.appearance.hidden)
+                            Text(HiddenFolderText.explanation)
+                                .font(.caption)
+                                .foregroundStyle(.secondary)
+                                .fixedSize(horizontal: false, vertical: true)
+                        }
+                    }
                 }
                 .padding(24)
                 .frame(maxWidth: .infinity, alignment: .leading)

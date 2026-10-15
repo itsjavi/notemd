@@ -46,6 +46,18 @@ struct RepositoryWindowView: View {
         } message: {
             Text((store.pendingAssetRestore?.files ?? []).map { ($0.path as NSString).lastPathComponent }.formatted(.list(type: .and)))
         }
+        .alert(
+            "Make “\(store.notePendingSecret.flatMap { store.note(at: $0)?.title } ?? "")” secret?",
+            isPresented: Binding(get: { store.notePendingSecret != nil }, set: { if !$0 { store.notePendingSecret = nil } })
+        ) {
+            Button("Make Secret") {
+                if let path = store.notePendingSecret { store.makeSecret(path) }
+                store.notePendingSecret = nil
+            }
+            Button("Cancel", role: .cancel) { store.notePendingSecret = nil }
+        } message: {
+            Text("Its title, tags and text are encrypted from now on, and it only shows while NoteMD is unlocked. Its earlier versions stay readable in version history, and its file name and attachments aren't encrypted.")
+        }
         .alert("Something went wrong", isPresented: Binding(get: { store.errorMessage != nil }, set: { if !$0 { store.errorMessage = nil } })) {
             Button("OK", role: .cancel) {}
         } message: {
@@ -62,8 +74,10 @@ struct RepositoryWindowView: View {
     /// Warns that the files go to the macOS Bin and names the notes that will lose their links.
     private var trashMessage: String {
         let paths = store.assetsPendingTrash ?? []
-        let users = Set(paths.flatMap { store.assetIndex.notes(referencing: $0) }).sorted().map { store.note(at: $0)?.title ?? $0 }
-        let bin = paths.count == 1 ? "The file moves to the macOS Bin." : "The files move to the macOS Bin."
+        let linking = store.shownNotes(Set(paths.flatMap { store.assetIndex.notes(referencing: $0) }).sorted())
+        let users = linking.shown.map { store.note(at: $0)?.title ?? $0 } + (linking.hidden == 0 ? [] : [linking.hidden == 1 ? "1 hidden note" : "\(linking.hidden) hidden notes"])
+        let bin = (paths.count == 1 ? "The file moves to the macOS Bin." : "The files move to the macOS Bin.")
+            + (store.allNotes.contains(where: \.isSecret) ? " Links in secret notes aren't checked." : "")
         guard !users.isEmpty else { return bin + " No note links " + (paths.count == 1 ? "it." : "them.") }
         return bin + " Its links are removed from " + users.formatted(.list(type: .and)) + "."
     }
@@ -77,6 +91,8 @@ struct RepositoryWindowView: View {
 
     @ViewBuilder private func sheetContent(_ sheet: RepositorySheet) -> some View {
         switch sheet {
+        case .secretSetup:
+            SecretNotesSetupView()
         case .renameAsset(let path):
             RenameAssetSheet(path: path, name: ((path as NSString).lastPathComponent as NSString).deletingPathExtension)
         case .folder(let draft):

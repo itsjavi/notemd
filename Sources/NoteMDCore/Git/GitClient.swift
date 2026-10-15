@@ -213,9 +213,15 @@ public struct GitClient: Sendable {
     /// File content at `revision` (`git show rev:path`); nil when the path doesn't exist there.
     /// Throws when the revision itself is invalid.
     public func content(of path: String, at revision: String) async throws -> String? {
+        try await data(of: path, at: revision).map { String(decoding: $0, as: UTF8.self) }
+    }
+
+    /// The file's bytes at `revision`, for files that aren't text (secret notes); nil when the path doesn't exist there.
+    /// Throws when the revision itself is invalid.
+    public func data(of path: String, at revision: String) async throws -> Data? {
         let arguments = ["cat-file", "blob", "\(revision):\(path)"]
         let output = try await execute(arguments)
-        if output.status == 0 { return String(decoding: output.stdout, as: UTF8.self) }
+        if output.status == 0 { return output.stdout }
         let revisionExists = try await execute(["rev-parse", "--verify", "--quiet", "\(revision)^{commit}"]).status == 0
         guard revisionExists else {
             throw GitError(arguments: arguments, exitCode: output.status, stderr: output.stderrString)

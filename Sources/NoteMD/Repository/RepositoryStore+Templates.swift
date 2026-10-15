@@ -37,7 +37,8 @@ extension RepositoryStore {
     /// and the original stays unchanged.
     func convertNote(_ path: String, toTemplate: Bool, copy: Bool) {
         if templatePendingConversion == path { templatePendingConversion = nil }
-        guard let note = note(at: path), let text = currentText(ofNoteAt: path) else { return }
+        // Secret notes aren't templates: their front matter is never read for lists.
+        guard let note = note(at: path), !note.isSecret, let text = currentText(ofNoteAt: path) else { return }
         guard copy || note.isTemplate != toTemplate else { return }
         var markdown = MarkdownText(text)
         markdown.setTemplate(toTemplate)

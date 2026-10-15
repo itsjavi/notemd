@@ -222,11 +222,13 @@ Decisions live in `backlog/decisions/` (platform, storage format, git versioning
 | `Sources/NoteMDCore/Templates`                                                 | Template parameters and the `{{…}}` renderer                                                                 |
 | `Sources/NoteMDCore/Markdown`                                                  | cmark-gfm HTML rendering (GFM extensions, alerts, front matter table)                                        |
 | `Sources/NoteMDCore/Git`, `Diff`                                               | git subprocess client, auto-committer, commit messages, line diff                                            |
+| `Sources/NoteMDCore/Crypto`                                                    | age v1 X25519 encryption (CryptoKit) and Bech32 keys for secret notes (decision-6)                           |
 | `Sources/NoteMD/App`                                                           | App entry, delegate, window manager, settings, variants                                                      |
 | `Sources/NoteMD/Repository`                                                    | Per-window `RepositoryStore`, open-note `NoteEditor`, FSEvents watcher                                       |
 | `Sources/NoteMD/Views`, `Editor`, `Preview`, `Folders`, `Templates`, `History` | UI                                                                                                           |
 | `Sources/NoteMDShare`, `Resources/Share`                                       | Share menu extension (sandboxed `.appex`, release build only unless `SHARE=1`)                               |
 | `Sources/NoteMD/Attachments`, `Voice`                                          | Drop/paste importer (assets/ copy or link), voice recorder, on-device transcription                          |
+| `Sources/NoteMD/Privacy`                                                       | App lock (idle lock, Touch ID/password), Secure Enclave key store, secret notes setup                        |
 | `Sources/NoteMD/Debug`                                                         | URL scheme handler; DEBUG-only test hooks                                                                    |
 | `Resources/`                                                                   | Info.plist, privacy manifest, `AppIcon.icon`                                                                 |
 | `scripts/`                                                                     | `build-app.sh`, `release.sh`, `make-icon.swift`, `window-screenshot.swift`, `demo-vault.sh`, `og-image.html` |
@@ -296,7 +298,13 @@ for incognito notes. `debug/state` reports the `layout:` (`files` or `root`) and
 - `ui/voice-start?from=<clip>|seconds=` (recorder with the microphone replaced by that clip), `ui/voice-stop`, `ui/voice-cancel`,
   `ui/transcribe?src=<link destination>&lang=en-US`, `ui/sheet?name=transcribe|recorder&src=`
 - `ui/commit-now`, `ui/restore?path=&rev=`, `ui/window-size?w=&h=`, `ui/appearance?value=dark|light`
-- `debug/state?out=/private/tmp/state.txt` writes a `key: value` state dump (`windowFrames:` gives window and screen frames)
+- `ui/translucency?value=0|1` (Settings › Translucent sidebar)
+- `ui/unlock` (as after Touch ID or the password, with the test key when secret notes are set up), `ui/lock`,
+  `ui/lock-after?seconds=`, `ui/hide-folder?path=&value=0|1[&confirm=0]` (`confirm=0` skips the first-time explanation)
+- `ui/secret-setup[?key=AGE-SECRET-KEY-1…]` (sets secret notes up with a software key: no Secure Enclave, no prompts),
+  `ui/secret-remove`, `ui/make-secret?note=&value=0|1[&confirm=1]`, `ui/sheet?name=secret-setup`
+- `debug/state?out=/private/tmp/state.txt` writes a `key: value` state dump (`windowFrames:` gives window and screen
+  frames; `lock:`, `hiddenFolders:` and `secrets:` the app lock, hidden folders and secret notes with a decryption count)
 
 Capture windows without activating the app: `swift scripts/window-screenshot.swift "NoteMD Test" /private/tmp/shot`.
 An open sheet blocks quitting (standard AppKit): close sheets before `quit`, or `pkill` the Test build.

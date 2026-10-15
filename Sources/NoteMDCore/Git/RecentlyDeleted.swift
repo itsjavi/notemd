@@ -20,7 +20,7 @@ public enum RecentlyDeleted {
         _ files: [GitDeletedFile], cleared: Set<String>, existingPaths: Set<String>, includingAssets: Bool = false
     ) -> [GitDeletedFile] {
         files.filter { file in
-            (NoteMDCore.noteExtensions.contains((file.path as NSString).pathExtension.lowercased()) || (includingAssets && isAsset(file.path)))
+            (NoteMDCore.isNotePath(file.path) || (includingAssets && isAsset(file.path)))
                 && !existingPaths.contains(file.path)
                 && !cleared.contains(key(for: file))
         }

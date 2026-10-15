@@ -2,9 +2,14 @@ import SwiftUI
 
 struct SettingsView: View {
     private let settings = AppSettings.shared
+    private let lock = AppLock.shared
     @AppStorage("settingsTab") private var tab = "general"
+    @State private var showsSecretSetup = false
+    @State private var confirmRemoveKey = false
 
     private let delays: [(String, Double)] = [("10 seconds", 10), ("30 seconds", 30), ("1 minute", 60), ("2 minutes", 120), ("5 minutes", 300)]
+    /// Never longer than 5 minutes (decision-6).
+    private let lockDelays: [(String, Double)] = [("30 seconds", 30), ("1 minute", 60), ("2 minutes", 120), ("5 minutes", 300)]
 
     var body: some View {
         @Bindable var settings = settings
@@ -18,6 +23,15 @@ struct SettingsView: View {
                     Text("Version History")
                 } footer: {
                     Text("Edits are saved to disk as you type. NoteMD records a git version once you've stopped editing for this long (and at least every 5 minutes while you keep typing), when you close a window, quit, or press ⌘S.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    Toggle("Translucent sidebar", isOn: $settings.translucentWindows)
+                } header: {
+                    Text("Appearance")
+                } footer: {
+                    Text("Turn off for a solid sidebar instead of glass that lets the desktop show through. macOS's Reduce Transparency setting turns translucency off in every app.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -40,10 +54,29 @@ struct SettingsView: View {
                 }
                 Section {
                     Toggle("Load remote images in previews", isOn: $settings.loadRemoteImages)
+                    Picker("Lock hidden folders after", selection: $settings.lockAfter) {
+                        ForEach(lockDelays, id: \.1) { Text($0.0).tag($0.1) }
+                    }
                 } header: {
                     Text("Privacy")
                 } footer: {
-                    Text("Images from the web can tell their server when you open a file. Applies to previews opened after the change.")
+                    Text("Images from the web can tell their server when you open a file. Applies to previews opened after the change. Hidden folders and secret notes lock again when NoteMD has been idle this long, and right away with Lock Now, screen lock, sleep or quit.")
+                        .font(.caption)
+                        .foregroundStyle(.secondary)
+                }
+                Section {
+                    if lock.secretsSetUp {
+                        LabeledContent("Secret notes", value: "On for this Mac")
+                        Button("Remove Key from This Mac…", role: .destructive) { confirmRemoveKey = true }
+                    } else {
+                        LabeledContent("Secret notes") {
+                            Button("Set Up…") { showsSecretSetup = true }
+                        }
+                    }
+                } header: {
+                    Text("Secret Notes")
+                } footer: {
+                    Text("Notes encrypted on disk, opened with \(AppLock.methodName). Make a note secret from its ⋯ menu or the Note menu.")
                         .font(.caption)
                         .foregroundStyle(.secondary)
                 }
@@ -92,5 +125,11 @@ struct SettingsView: View {
             .tag("editor")
         }
         .frame(width: 520, height: 500)
+        .sheet(isPresented: $showsSecretSetup) { SecretNotesSetupView() }
+        .confirmationDialog("Remove the secret notes key from this Mac?", isPresented: $confirmRemoveKey) {
+            Button("Remove Key", role: .destructive) { try? lock.removeSecrets() }
+        } message: {
+            Text("Secret notes stay encrypted. To open them on this Mac again, you'll need your recovery key.")
+        }
     }
 }
