@@ -29,3 +29,6 @@ jobs:
         run: ./scripts/ci-select-xcode.sh
       - name: Test
         run: swift test --disable-keychain
+      # The release configuration checks concurrency more strictly than the debug build the tests use.
+      - name: Release build
+        run: swift build -c release --disable-keychain --product NoteMD

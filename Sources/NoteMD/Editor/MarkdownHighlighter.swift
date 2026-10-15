@@ -73,9 +73,11 @@ struct MarkdownHighlighter {
         func intersects(_ ranges: [NSRange], _ range: NSRange) -> Bool {
             ranges.contains { NSIntersectionRange($0, range).length > 0 }
         }
+        // A loop rather than enumerateMatches, whose block Xcode 26.6 imports as sending (body would race). The
+        // protected ranges are still checked as matches come, so a match sees what earlier ones protected.
         func each(_ regex: NSRegularExpression, block: Bool = false, _ body: (NSTextCheckingResult) -> Void) {
-            regex.enumerateMatches(in: text, range: full) { match, _, _ in
-                if let match, !intersects(block ? blockProtected : protected, match.range) { body(match) }
+            for match in regex.matches(in: text, range: full) where !intersects(block ? blockProtected : protected, match.range) {
+                body(match)
             }
         }
 
