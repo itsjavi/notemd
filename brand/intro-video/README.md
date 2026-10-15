@@ -1,6 +1,6 @@
 # NoteMD intro video
 
-A 42-second product intro, built and rendered entirely from code: motion graphics in HTML/CSS driven by one paused
+A 47-second product intro, built and rendered entirely from code: motion graphics in HTML/CSS driven by one paused
 [GSAP](https://gsap.com) timeline, warm electronic music and UI sound effects synthesized in Python, synced through a
 shared cue list.
 

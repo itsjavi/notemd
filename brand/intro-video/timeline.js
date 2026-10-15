@@ -4,7 +4,7 @@
 // exported for audio/soundtrack.py. Scenes start on bar lines of the 100 BPM score (audio/score.py).
 
 const BAR = 2.4;
-const DURATION = 42;
+const DURATION = 46.8;
 const FPS = 30;
 
 const $ = (id) => document.getElementById(id);
@@ -101,7 +101,7 @@ tl.to("#headline", { opacity: 0, y: -70, duration: 0.5, ease: "power2.in" }, 9.0
   tl.to("#revealShot", { opacity: 0, x: -260, duration: 0.42, ease: "power2.in" }, end - 0.45);
 }
 
-// ---------------------------------------------------------------- features (bars 6-11)
+// ---------------------------------------------------------------- features (bars 6-13)
 
 /** Shared feature layout: caption on the left, screenshot sliding in from the right, a slow zoom to `focus`. */
 function feature(id, start, { focus, zoom, zoomAt, zoomDur }) {
@@ -149,7 +149,7 @@ function feature(id, start, { focus, zoom, zoomAt, zoomDur }) {
 
 // Templates: type the prompt, fill the form, the placeholder becomes the value.
 {
-  const start = 10 * BAR;
+  const start = 12 * BAR;
   feature("templates", start, { focus: "62% 30%", zoom: 1.25, zoomAt: start + 2.4, zoomDur: 1.9 });
   const prefixEnd = typer($("codePrefix"), "# Code review: ", start + 0.55, 0.045, -5);
   const slotEnd = typer($("placeholder"), "{{project}}", prefixEnd + 0.02, 0.045, -5);
@@ -209,12 +209,59 @@ function feature(id, start, { focus, zoom, zoomAt, zoomDur }) {
   });
 }
 
-// ---------------------------------------------------------------- how templates work (bars 12-14)
+// Hidden folders and secret notes: the window is blurred while locked, Touch ID unlocks it, then the hidden folder
+// and the secret note light up.
+{
+  const start = 10 * BAR;
+  const end = feature("privacy", start, {
+    // Anchored at the left edge so the sidebar's hidden folder stays clear of the caption scrim.
+    focus: "0% 20%",
+    zoom: 1.22,
+    zoomAt: start + 2.0,
+    zoomDur: 2.3,
+  });
+  const unlockAt = start + 1.45;
+  const shadow = "drop-shadow(0px 40px 70px rgba(0, 0, 0, 0.55))";
+  tl.fromTo(
+    "#privacyShot img",
+    { filter: `blur(18px) ${shadow}` },
+    { filter: `blur(0px) ${shadow}`, duration: 0.55, ease: "power2.out", immediateRender: true },
+    unlockAt,
+  );
+  enter("#unlock", start + 0.5, { y: 40, scale: 0.95 }, { duration: 0.5, ease: "back.out(1.6)" });
+  cue(start + 0.5, "pop", -4);
+  tl.fromTo(
+    "#unlockPulse",
+    { opacity: 0.9, scale: 1 },
+    { opacity: 0, scale: 1.9, duration: 0.7, ease: "power2.out", immediateRender: false },
+    unlockAt - 0.05,
+  );
+  tl.to("#unlockShackle", { y: -7, duration: 0.3, ease: "back.out(3)" }, unlockAt);
+  tl.to(
+    "#unlock .unlock-icon",
+    { color: "#3fb950", backgroundColor: "rgba(63, 185, 80, 0.16)", duration: 0.25, ease: "none" },
+    unlockAt,
+  );
+  cue(unlockAt, "click");
+  cue(unlockAt + 0.05, "chime", -8);
+  enter("#privacyFolderRing", start + 2.1, { scale: 1.12 }, { duration: 0.4, ease: "back.out(2)" });
+  cue(start + 2.1, "pop");
+  enter("#privacyNoteRing", start + 2.7, { scale: 1.12 }, { duration: 0.4, ease: "back.out(2)" });
+  cue(start + 2.7, "sparkle", -3);
+  tl.to("#unlock", { opacity: 0, y: -20, duration: 0.42, ease: "power2.in" }, end - 0.45);
+  dynamics.push((t) => {
+    const unlocked = t >= unlockAt;
+    $("unlockLabel").textContent = unlocked ? "Unlocked" : "Locked";
+    $("unlockHint").textContent = unlocked ? "with Touch ID" : "Touch ID to unlock";
+  });
+}
+
+// ---------------------------------------------------------------- how templates work (bars 14-16)
 
 // Three steps left to right: the template source, the form it generates, the prompt you copy.
 {
-  const start = 12 * BAR;
-  const end = 15 * BAR;
+  const start = 14 * BAR;
+  const end = 17 * BAR;
   enter("#explainerCaption .eyebrow", start, { y: 30 });
   enter("#explainerCaption .title", start + 0.1, { y: 30 });
   cue(start, "whoosh", -3);
@@ -296,10 +343,10 @@ function feature(id, start, { focus, zoom, zoomAt, zoomDur }) {
   );
 }
 
-// ---------------------------------------------------------------- outro (bars 15-16)
+// ---------------------------------------------------------------- outro (bars 17-18)
 
 {
-  const start = 15 * BAR;
+  const start = 17 * BAR;
   tl.fromTo(
     "#outroIcon",
     { opacity: 0, scale: 0.5, filter: `blur(14px) ${iconShadow}` },

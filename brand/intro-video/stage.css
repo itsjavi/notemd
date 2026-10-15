@@ -359,6 +359,65 @@ body {
   transform-origin: center;
 }
 
+/* Unlock card (hidden folders and secret notes) */
+
+.unlock {
+  position: absolute;
+  z-index: 3;
+  left: 560px;
+  top: 780px;
+  display: flex;
+  align-items: center;
+  gap: 24px;
+  padding: 22px 34px 22px 26px;
+  border: 1px solid var(--line);
+  border-radius: 20px;
+  background: rgb(21 34 38 / 0.94);
+  box-shadow: 0 30px 60px rgb(0 0 0 / 0.5);
+  text-align: left;
+}
+
+.unlock-icon {
+  position: relative;
+  width: 64px;
+  height: 64px;
+  display: grid;
+  place-items: center;
+  border-radius: 50%;
+  background: rgb(160 175 173 / 0.14);
+  color: var(--muted);
+}
+
+.unlock-icon svg {
+  width: 30px;
+  height: 36px;
+  overflow: visible;
+}
+
+.unlock-pulse {
+  position: absolute;
+  inset: 0;
+  border: 3px solid var(--green);
+  border-radius: 50%;
+  opacity: 0;
+}
+
+.unlock-text {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.unlock-label {
+  font-size: 30px;
+  font-weight: 700;
+}
+
+.unlock-hint {
+  color: var(--muted);
+  font-size: 22px;
+}
+
 /* How templates work */
 
 .steps {

@@ -1,13 +1,14 @@
-"""NoteMD intro score: warm electronic, 100 BPM, D major, 17 bars (40.8 s) plus ring-out. Original material.
+"""NoteMD intro score: warm electronic, 100 BPM, D major, 19 bars (45.6 s) plus ring-out. Original material.
 
 One bar is 2.4 s, so every scene of the animation starts on a bar line (see ../timeline.js):
 
   bars 0-1   logo         pad swell and held keys (IV -> V)
   bars 2-3   headline     keys comping, round bass, shaker and rim
-  bars 4-11  features     full groove, mallet motif (bars 4-7), variation with arpeggio (bars 8-11)
-  bars 12-13 templates    how templates work: counter-melody on bells, open hats
-  bar 14     templates    the prompt appears in the breakdown: drums out, riser into the resolution
-  bars 15-16 outro        tonic sting (crash, bell arpeggio), held chord
+  bars 4-13  features     full groove, mallet motif (bars 4-7), variation with arpeggio (bars 8-11), then a
+                          turnaround (IV -> V) with a new lead phrase (bars 12-13)
+  bars 14-15 templates    how templates work: counter-melody on bells, open hats
+  bar 16     templates    the prompt appears in the breakdown: drums out, riser into the resolution
+  bars 17-18 outro        tonic sting (crash, bell arpeggio), held chord
 """
 
 from __future__ import annotations
@@ -22,7 +23,7 @@ from music import common as C
 from sequencer import Song
 
 BPM = 100
-BARS = 17
+BARS = 19
 
 
 class Mallet(I.Voice):
@@ -70,6 +71,7 @@ B5:3 A5 F#5:2 A5:2 . . D6:2 C#6:4 |
 MOTIF_END = "B5:4 A5:4 E5:4 C#5:4 |"
 VARIATION_END = "E6:4 D6:2 C#6:2 B5:4 A5:4 |"
 COUNTER = "F#6:4 E6:4 D6:4 A5:4 | B5:6 A5:2 F#5:8 |"
+TURNAROUND = "D6:3 C#6 B5:2 A5:2 . . G5:2 F#5:4 | E5:6 F#5:2 A5:8 |"
 STING = "A5:2 D6:2 F#6:2 A6:10 |"
 
 GROOVE = {
@@ -96,42 +98,44 @@ def compose() -> Song:
     s.chords(2, "Dmaj9 | Bm9 |")
     for bar in (4, 8):
         s.chords(bar, "Dmaj9 | Bm9 | Gmaj9 | Asus4:8 A:8 |")
-    s.chords(12, "Dmaj9 | Bm9 | Gmaj9:8 Asus4:4 A:4 | Dmaj9 | Dmaj9 |")
-    for name, bar in (("logo", 0), ("headline", 2), ("features", 4), ("variation", 8), ("explainer", 12),
-                      ("breakdown", 14), ("outro", 15)):
+    s.chords(12, "Gmaj9 | Asus4:8 A:8 |")
+    s.chords(14, "Dmaj9 | Bm9 | Gmaj9:8 Asus4:4 A:4 | Dmaj9 | Dmaj9 |")
+    for name, bar in (("logo", 0), ("headline", 2), ("features", 4), ("variation", 8), ("turnaround", 12),
+                      ("explainer", 14), ("breakdown", 16), ("outro", 17)):
         s.section(name, bar)
 
     # Pad throughout, opening up during the logo.
-    s.sustain_chords("pad", 0, 17, center=60, vel=0.6)
-    s.filter_sweep("pad", "lp", [(0, 500.0), (2, 2400.0), (14, 2400.0), (15, 1200.0), (17, 700.0)])
+    s.sustain_chords("pad", 0, 19, center=60, vel=0.6)
+    s.filter_sweep("pad", "lp", [(0, 500.0), (2, 2400.0), (16, 2400.0), (17, 1200.0), (19, 700.0)])
 
     # Keys: held chords in the intro, lo-fi comping from the headline on, held again at the end.
     s.comp("keys", 0, 2, "X:16", center=62, vel=0.5, gate=1.0)
-    s.comp("keys", 2, 12, ". . X:3 . . x:2 . . x:4 .", center=64, vel=0.6, gate=0.9)
-    s.comp("keys", 14, 1, "X:8 x:4 x:4", center=62, vel=0.5, gate=1.0)
-    s.comp("keys", 15, 2, "X:16", center=64, vel=0.55, gate=1.0)
+    s.comp("keys", 2, 14, ". . X:3 . . x:2 . . x:4 .", center=64, vel=0.6, gate=0.9)
+    s.comp("keys", 16, 1, "X:8 x:4 x:4", center=62, vel=0.5, gate=1.0)
+    s.comp("keys", 17, 2, "X:16", center=64, vel=0.55, gate=1.0)
 
     # Bass: whole notes for the headline, a gentle groove for the features, the tonic to close.
     s.groove("bass", 2, 2, "1:16", octave=2, vel=0.7, low=33)
-    s.groove("bass", 4, 10, "1:6 . . 5:4 . . 8:2", octave=2, vel=0.8, low=33)
-    s.groove("bass", 14, 1, "1:8 1:4 1:4", octave=2, vel=0.7, low=33)
-    s.groove("bass", 15, 2, "1:16", octave=2, vel=0.8, low=33)
+    s.groove("bass", 4, 12, "1:6 . . 5:4 . . 8:2", octave=2, vel=0.8, low=33)
+    s.groove("bass", 16, 1, "1:8 1:4 1:4", octave=2, vel=0.7, low=33)
+    s.groove("bass", 17, 2, "1:16", octave=2, vel=0.8, low=33)
 
-    # Melody: motif, variation with arpeggio, counter-melody, sting.
+    # Melody: motif, variation with arpeggio, the turnaround, counter-melody, sting.
     s.notes("lead", 4, MOTIF + MOTIF_END, vel=0.75)
     s.notes("lead", 8, MOTIF + VARIATION_END, vel=0.8)
-    s.arp("arp", 8, 6, rate=2, mode="pingpong", octaves=2, center=69, vel=0.45, accents="Xoxo", pan_spread=0.5)
-    s.notes("bell", 12, COUNTER, vel=0.7)
-    s.notes("bell", 15, STING, vel=0.85)
+    s.notes("lead", 12, TURNAROUND, vel=0.75)
+    s.arp("arp", 8, 8, rate=2, mode="pingpong", octaves=2, center=69, vel=0.45, accents="Xoxo", pan_spread=0.5)
+    s.notes("bell", 14, COUNTER, vel=0.7)
+    s.notes("bell", 17, STING, vel=0.85)
 
     # Drums: shaker and rim for the headline, the groove for the features, nothing in the breakdown.
     C.beat(s, 2, 2, k, {"shaker": "o.o.o.o.o.o.o.o.", "rim": "....x.......x..."}, vel=0.8)
-    C.beat(s, 4, 8, k, GROOVE)
-    C.beat(s, 12, 2, k, {**GROOVE, "ohat": "..O...O...O...O."})
+    C.beat(s, 4, 10, k, GROOVE)
+    C.beat(s, 14, 2, k, {**GROOVE, "ohat": "..O...O...O...O."})
     C.riser(s, 4, 1, vel=0.5, seed=4)
-    C.riser(s, 15, 1, vel=0.6, seed=15)
+    C.riser(s, 17, 1, vel=0.6, seed=15)
     C.crash(s, 4, 0.5)
-    C.crash(s, 15, 0.7)
-    C.impact(s, 15, 0.5)
-    s.drums(15, 1, {"kick": ("X...............", k["kick"])})
+    C.crash(s, 17, 0.7)
+    C.impact(s, 17, 0.5)
+    s.drums(17, 1, {"kick": ("X...............", k["kick"])})
     return s

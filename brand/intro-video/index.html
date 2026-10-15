@@ -72,7 +72,7 @@
         </div>
       </div>
 
-      <!-- Templates (bars 10-11) -->
+      <!-- Templates (bars 12-13) -->
       <div class="scene feature" id="templates">
         <div class="caption caption-side">
           <div class="eyebrow"><span>##</span> Templates</div>
@@ -122,7 +122,51 @@
         </div>
       </div>
 
-      <!-- How templates work (bars 12-14) -->
+      <!-- Hidden folders and secret notes (bars 10-11) -->
+      <div class="scene feature" id="privacy">
+        <div class="caption caption-side">
+          <div class="eyebrow"><span>##</span> Private</div>
+          <div class="title">Hidden folders.<br />Secret notes.</div>
+          <div class="sub">
+            Out of sight until you unlock with Touch ID. Secret notes are encrypted on disk.
+          </div>
+        </div>
+        <div class="shot shot-side" id="privacyShot">
+          <img src="../../web/assets/secret-notes.webp" alt="" />
+          <div
+            class="ring"
+            id="privacyFolderRing"
+            style="left: 0.6%; top: 30.2%; width: 17.4%; height: 4.6%"
+          ></div>
+          <div
+            class="ring ring-green"
+            id="privacyNoteRing"
+            style="left: 19%; top: 7.4%; width: 23.2%; height: 7%"
+          ></div>
+        </div>
+        <div class="unlock" id="unlock">
+          <span class="unlock-icon">
+            <span class="unlock-pulse" id="unlockPulse"></span>
+            <svg viewBox="0 0 40 48" aria-hidden="true">
+              <path
+                id="unlockShackle"
+                d="M10 22 V14 a10 10 0 0 1 20 0 V22"
+                fill="none"
+                stroke="currentColor"
+                stroke-width="4.5"
+                stroke-linecap="round"
+              />
+              <rect x="4" y="21" width="32" height="25" rx="6" fill="currentColor" />
+            </svg>
+          </span>
+          <span class="unlock-text">
+            <span class="unlock-label" id="unlockLabel">Locked</span>
+            <span class="unlock-hint" id="unlockHint">Touch ID to unlock</span>
+          </span>
+        </div>
+      </div>
+
+      <!-- How templates work (bars 14-16) -->
       <div class="scene" id="explainer">
         <div class="caption caption-center" id="explainerCaption">
           <div class="eyebrow"><span>##</span> How templates work</div>
@@ -197,7 +241,7 @@
         </div>
       </div>
 
-      <!-- Outro (bars 15-16) -->
+      <!-- Outro (bars 17-18) -->
       <div class="outro" id="outro">
         <img class="outro-icon" id="outroIcon" src="../../web/assets/icon.png" alt="" />
         <div class="outro-name" id="outroName">NoteMD</div>
