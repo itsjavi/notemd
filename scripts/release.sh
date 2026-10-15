@@ -1,5 +1,6 @@
 #!/bin/bash
-# Builds a release of NoteMD.app for Apple silicon into ./build/release: the app, a zip and a DMG.
+# Builds a release of NoteMD.app for Apple silicon into ./build/release: the app, a zip (for Sparkle updates)
+# and a DMG (for downloads).
 #
 # Credentials, all optional (without them the build is ad-hoc signed, and other Macs need
 # System Settings ▸ Privacy & Security ▸ Open Anyway on first launch):
@@ -7,7 +8,7 @@
 #   NOTARY_PROFILE=<name>        # a notarytool Keychain profile, made once with
 #                                # xcrun notarytool store-credentials <name> --apple-id … --team-id …
 #   NOTARY_KEYCHAIN=<path>       # the keychain holding that profile, if not the login keychain (CI)
-# BUILD_NUMBER overrides the build number (default: the commit count, so it only ever grows).
+# VERSION and BUILD override ./VERSION and the commit-count build number (see build-app.sh).
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
@@ -21,9 +22,9 @@ elif ! security find-identity -v -p codesigning | grep -qF "$DEVELOPER_ID"; then
   exit 1
 fi
 if [ -z "${NOTARY_PROFILE:-}" ]; then missing+=("NOTARY_PROFILE (a notarytool Keychain profile)"); fi
+if [ ! -s Resources/SparklePublicKey.txt ] && [ -z "${SPARKLE_PUBLIC_KEY:-}" ]; then missing+=("Resources/SparklePublicKey.txt (Sparkle's public key: without it the app can't update itself)"); fi
 
-BUILD_NUMBER="${BUILD_NUMBER:-$(git rev-list --count HEAD 2>/dev/null || echo 1)}" \
-  SIGN_IDENTITY="${DEVELOPER_ID:--}" ./scripts/build-app.sh release
+ARCH=arm64 SIGN_IDENTITY="${DEVELOPER_ID:--}" ./scripts/build-app.sh release
 
 VERSION="$(/usr/libexec/PlistBuddy -c "Print :CFBundleShortVersionString" "$APP/Contents/Info.plist")"
 BUILD="$(/usr/libexec/PlistBuddy -c "Print :CFBundleVersion" "$APP/Contents/Info.plist")"

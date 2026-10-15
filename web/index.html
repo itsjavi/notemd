@@ -54,6 +54,7 @@
         "description": "A native macOS note-taking app for plain Markdown files, with automatic git versioning.",
         "url": "https://itsjavi.com/notemd/",
         "license": "https://opensource.org/licenses/MIT",
+        "downloadUrl": "https://github.com/itsjavi/notemd/releases/latest",
         "offers": { "@type": "Offer", "price": "0", "priceCurrency": "USD" }
       }
     </script>
@@ -109,12 +110,20 @@
             record voice notes, and send Markdown files in from Finder or the Share menu.
           </p>
           <div class="actions">
-            <a class="button button-primary" href="https://github.com/itsjavi/notemd"
+            <a
+              class="button button-primary"
+              href="https://github.com/itsjavi/notemd/releases/latest"
+              data-release-download
+              >Download for Mac</a
+            >
+            <a class="button button-secondary" href="https://github.com/itsjavi/notemd"
               >View on GitHub</a
             >
-            <a class="button button-secondary" href="#get">Build it yourself</a>
           </div>
-          <p class="fineprint">macOS 26 on Apple silicon · MIT licensed</p>
+          <p class="fineprint">
+            <span data-release-version>Latest release</span> · macOS 26 on Apple silicon · MIT
+            licensed
+          </p>
         </div>
         <div class="container hero-shot">
           <a href="assets/screenshot-light.webp" data-lightbox>
@@ -397,11 +406,25 @@
         <div class="container get-inner">
           <div>
             <p class="eyebrow"><span aria-hidden="true">##</span> Get it</p>
-            <h2 id="get-title">Build NoteMD in a minute.</h2>
+            <h2 id="get-title">Download NoteMD.</h2>
             <p class="section-lead">
-              You need macOS 26 on Apple silicon, Xcode 26, <code>git</code>, and
-              <code>git-lfs</code> for attachments. <code>make install</code> builds the release app
-              and copies it to <code>/Applications</code>.
+              A disk image for macOS 26 on Apple silicon, signed and notarized by Apple. Updates
+              arrive inside the app, and every
+              <a href="https://github.com/itsjavi/notemd/releases">release</a> lists SHA-256
+              checksums. NoteMD uses your <code>git</code>, and <code>git-lfs</code> for
+              attachments.
+            </p>
+            <div class="actions">
+              <a
+                class="button button-primary"
+                href="https://github.com/itsjavi/notemd/releases/latest"
+                data-release-download
+                >Download NoteMD</a
+              >
+            </div>
+            <p class="fineprint">
+              Or build it yourself with Xcode 26: <code>make install</code> builds the app and
+              copies it to <code>/Applications</code>.
             </p>
           </div>
           <div class="code-block">
@@ -447,6 +470,24 @@ make install</code></pre>
     </dialog>
 
     <script>
+      // The download buttons link to the newest release's page; with JavaScript they get its DMG and version from
+      // GitHub's API (which allows other origins), so a release never needs a site deploy. Pre-releases are never
+      // "latest".
+      fetch("https://api.github.com/repos/itsjavi/notemd/releases/latest", {
+        headers: { Accept: "application/vnd.github+json" },
+      })
+        .then((response) => (response.ok ? response.json() : Promise.reject()))
+        .then((release) => {
+          const version = release.tag_name?.replace(/^v/, "");
+          const dmg = release.assets?.find((asset) => asset.name.endsWith(".dmg"));
+          if (!version || !/^[0-9][0-9A-Za-z.-]*$/.test(version) || !dmg) return;
+          for (const el of document.querySelectorAll("[data-release-version]"))
+            el.textContent = `Version ${version}`;
+          for (const el of document.querySelectorAll("[data-release-download]"))
+            el.href = dmg.browser_download_url;
+        })
+        .catch(() => {});
+
       // Screenshots open in an overlay instead of navigating away; the links still work without JavaScript.
       const lightbox = document.querySelector(".lightbox");
       const lightboxImage = lightbox.querySelector("img");

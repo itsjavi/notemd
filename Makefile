@@ -1,4 +1,4 @@
-.PHONY: build test app dev test-app run run-test install release build-notarized install-notarized icon fmt clean
+.PHONY: build test app dev test-app run run-test install release appcast bump build-notarized install-notarized icon fmt clean
 
 build:
 	swift build
@@ -31,6 +31,14 @@ install: app
 # NOTARY_PROFILE are set, otherwise builds ad-hoc and lists what's missing (see scripts/release.sh).
 release:
 	scripts/release.sh
+
+# Signs build/release's zip (EdDSA key "notemd" from the Keychain) and updates build/appcast/appcast.xml.
+appcast:
+	scripts/appcast.sh
+
+# Bumps VERSION, commits and tags it: make bump V=patch|minor|major|X.Y.Z [PUSH=1] (docs/releasing.md)
+bump:
+	scripts/bump-version.sh $(V) $(if $(PUSH),--push)
 
 # scripts/release.sh with this Mac's credentials: DEVELOPER_ID defaults to the Keychain's Developer ID
 # Application identity and NOTARY_PROFILE to "lamina" (the notarytool profile Lamina and QuickEdit use: same

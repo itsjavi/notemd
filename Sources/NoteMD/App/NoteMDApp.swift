@@ -22,6 +22,10 @@ struct NoteMDCommands: Commands {
     private var settings: AppSettings { .shared }
 
     var body: some Commands {
+        CommandGroup(after: .appInfo) {
+            Button("Check for Updates…") { AppUpdater.checkForUpdates() }
+                .disabled(AppUpdater.controller == nil)
+        }
         CommandGroup(replacing: .newItem) {
             Button("New Note") { store?.createNote() }
                 .keyboardShortcut("n")

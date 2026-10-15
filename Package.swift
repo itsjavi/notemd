@@ -12,6 +12,8 @@ let package = Package(
         .package(url: "https://github.com/swiftlang/swift-cmark.git", from: "0.9.0"),
         // De-facto Swift YAML library, used for note front matter.
         .package(url: "https://github.com/jpsim/Yams.git", from: "6.2.0"),
+        // App updates (decision-10). build-app.sh embeds Sparkle.framework in Contents/Frameworks.
+        .package(url: "https://github.com/sparkle-project/Sparkle", from: "2.10.0"),
     ],
     targets: [
         .target(
@@ -25,9 +27,11 @@ let package = Package(
         ),
         .executableTarget(
             name: "NoteMD",
-            dependencies: ["NoteMDCore"],
+            dependencies: ["NoteMDCore", .product(name: "Sparkle", package: "Sparkle")],
             path: "Sources/NoteMD",
-            swiftSettings: [.defaultIsolation(MainActor.self)]
+            swiftSettings: [.defaultIsolation(MainActor.self)],
+            // The app bundle keeps Sparkle.framework in Contents/Frameworks.
+            linkerSettings: [.unsafeFlags(["-Xlinker", "-rpath", "-Xlinker", "@executable_path/../Frameworks"])]
         ),
         // Share menu extension, assembled into Contents/PlugIns/NoteMDShare.appex by build-app.sh.
         .executableTarget(

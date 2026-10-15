@@ -101,6 +101,12 @@ result. Voice notes and video reviews came next, because some thoughts are faste
 - `git-lfs` for attachments (`brew install git-lfs`)
 - Xcode 26 or later to build
 
+## Download
+
+Get the DMG from the [latest release](https://github.com/itsjavi/notemd/releases/latest): signed with Developer ID and
+notarized by Apple, and it updates itself. Each release lists SHA-256 checksums; check a download with
+`shasum -a 256 -c SHA256SUMS --ignore-missing`.
+
 ## Building
 
 ```bash
@@ -112,7 +118,8 @@ make install  # builds build/NoteMD.app and copies it to /Applications
 Other targets: `make app` (release build only), `make run` (debug build), `make test` (unit tests),
 `make build-notarized` (signed and notarized app, zip and DMG in `build/release`; needs a Developer ID Application
 identity and a `notarytool` Keychain profile) and `make install-notarized` (installs that build). The Share menu lists
-NoteMD once the release build is in `/Applications`.
+NoteMD once the release build is in `/Applications`. Releases are published from version tags with `make bump`; see
+[docs/releasing.md](docs/releasing.md).
 
 See [AGENTS.md](AGENTS.md) for the project layout, build variants and test hooks. The website lives in [`web/`](web) and
 is deployed to GitHub Pages on every push to `main` that touches it.

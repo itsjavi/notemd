@@ -202,39 +202,42 @@ Decisions live in `backlog/decisions/` (platform, storage format, git versioning
 
 ### Commands
 
-| Command                           | What it does                                                             |
-| --------------------------------- | ------------------------------------------------------------------------ |
-| `swift build` / `make build`      | Debug build of all targets                                               |
-| `swift test` / `make test`        | Core unit tests (Swift Testing)                                          |
-| `make app`                        | Release `build/NoteMD.app` (ad-hoc signed unless `SIGN_IDENTITY` is set) |
-| `make dev` / `make run`           | Debug `build/NoteMD Dev.app` (own bundle id and defaults)                |
-| `make test-app` / `make run-test` | Background agent build `build/NoteMD Test.app`                           |
-| `make install`                    | Quits the installed copy and installs the release build to /Applications |
-| `make build-notarized`            | Developer ID signed and notarized app, zip and DMG in `build/release`    |
-| `make install-notarized`          | Like `make install`, with the notarized build                            |
-| `make icon`                       | Redraws `Resources/AppIcon.icon` from `scripts/make-icon.swift`          |
+| Command                             | What it does                                                                                                                                                          |
+| ----------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `swift build` / `make build`        | Debug build of all targets                                                                                                                                            |
+| `swift test` / `make test`          | Core unit tests (Swift Testing)                                                                                                                                       |
+| `make app`                          | Release `build/NoteMD.app` (ad-hoc signed unless `SIGN_IDENTITY` is set)                                                                                              |
+| `make dev` / `make run`             | Debug `build/NoteMD Dev.app` (own bundle id and defaults)                                                                                                             |
+| `make test-app` / `make run-test`   | Background agent build `build/NoteMD Test.app`                                                                                                                        |
+| `make install`                      | Quits the installed copy and installs the release build to /Applications                                                                                              |
+| `make build-notarized`              | Developer ID signed and notarized app, zip and DMG in `build/release`                                                                                                 |
+| `make install-notarized`            | Like `make install`, with the notarized build                                                                                                                         |
+| `make release`, `make appcast`      | Release zip/DMG (ad-hoc unless `DEVELOPER_ID`/`NOTARY_PROFILE`), Sparkle feed                                                                                         |
+| `make bump V=patch\|X.Y.Z [PUSH=1]` | Bumps `VERSION` and tags `vX.Y.Z`; a pushed tag publishes a GitHub Release ([docs/releasing.md](docs/releasing.md)). Never tag or push a release unless the user asks |
+| `make icon`                         | Redraws `Resources/AppIcon.icon` from `scripts/make-icon.swift`                                                                                                       |
 
 ### Layout
 
-| Path                                                                           | Contents                                                                                                     |
-| ------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------ |
-| `Sources/NoteMDCore/Notes`                                                     | Front matter (Yams, raw-entry preserving), notes, folders + `.notemd.json`, scanner, search                  |
-| `Sources/NoteMDCore/Templates`                                                 | Template parameters and the `{{…}}` renderer                                                                 |
-| `Sources/NoteMDCore/Markdown`                                                  | cmark-gfm HTML rendering (GFM extensions, alerts, front matter table)                                        |
-| `Sources/NoteMDCore/Git`, `Diff`                                               | git subprocess client, auto-committer, commit messages, line diff                                            |
-| `Sources/NoteMDCore/Crypto`                                                    | age v1 X25519 encryption (CryptoKit) and Bech32 keys for secret notes (decision-6)                           |
-| `Sources/NoteMD/App`                                                           | App entry, delegate, window manager, settings, variants                                                      |
-| `Sources/NoteMD/Repository`                                                    | Per-window `RepositoryStore`, open-note `NoteEditor`, FSEvents watcher                                       |
-| `Sources/NoteMD/Views`, `Editor`, `Preview`, `Folders`, `Templates`, `History` | UI                                                                                                           |
-| `Sources/NoteMDShare`, `Resources/Share`                                       | Share menu extension (sandboxed `.appex`, release build only unless `SHARE=1`)                               |
-| `Sources/NoteMD/Attachments`, `Voice`                                          | Drop/paste importer (assets/ copy or link), voice recorder, on-device transcription                          |
-| `Sources/NoteMD/Privacy`                                                       | App lock (idle lock, Touch ID/password), Secure Enclave key store, secret notes setup                        |
-| `Sources/NoteMD/Debug`                                                         | URL scheme handler; DEBUG-only test hooks                                                                    |
-| `Resources/`                                                                   | Info.plist, privacy manifest, `AppIcon.icon`                                                                 |
-| `scripts/`                                                                     | `build-app.sh`, `release.sh`, `make-icon.swift`, `window-screenshot.swift`, `demo-vault.sh`, `og-image.html` |
-| `web/`, `.github/workflows/pages.yml`                                          | Website (https://itsjavi.com/notemd/) and its GitHub Pages deployment                                        |
-| `brand/`                                                                       | Screenshot/social-card recipes (`brand/README.md`) and the generated intro video (`intro-video/`)            |
-| `skills/create-reusable-prompt/`                                               | Agent skill for writing template notes, and the front matter JSON Schema (keep in sync with Core)            |
+| Path                                                                           | Contents                                                                                                                                                                |
+| ------------------------------------------------------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `Sources/NoteMDCore/Notes`                                                     | Front matter (Yams, raw-entry preserving), notes, folders + `.notemd.json`, scanner, search                                                                             |
+| `Sources/NoteMDCore/Templates`                                                 | Template parameters and the `{{…}}` renderer                                                                                                                            |
+| `Sources/NoteMDCore/Markdown`                                                  | cmark-gfm HTML rendering (GFM extensions, alerts, front matter table)                                                                                                   |
+| `Sources/NoteMDCore/Git`, `Diff`                                               | git subprocess client, auto-committer, commit messages, line diff                                                                                                       |
+| `Sources/NoteMDCore/Crypto`                                                    | age v1 X25519 encryption (CryptoKit) and Bech32 keys for secret notes (decision-6)                                                                                      |
+| `Sources/NoteMD/App`                                                           | App entry, delegate, window manager, settings, variants                                                                                                                 |
+| `Sources/NoteMD/Repository`                                                    | Per-window `RepositoryStore`, open-note `NoteEditor`, FSEvents watcher                                                                                                  |
+| `Sources/NoteMD/Views`, `Editor`, `Preview`, `Folders`, `Templates`, `History` | UI                                                                                                                                                                      |
+| `Sources/NoteMDShare`, `Resources/Share`                                       | Share menu extension (sandboxed `.appex`, release build only unless `SHARE=1`)                                                                                          |
+| `Sources/NoteMD/Attachments`, `Voice`                                          | Drop/paste importer (assets/ copy or link), voice recorder, on-device transcription                                                                                     |
+| `Sources/NoteMD/Privacy`                                                       | App lock (idle lock, Touch ID/password), Secure Enclave key store, secret notes setup                                                                                   |
+| `Sources/NoteMD/Debug`                                                         | URL scheme handler; DEBUG-only test hooks                                                                                                                               |
+| `Resources/`                                                                   | Info.plist, privacy manifest, `AppIcon.icon`                                                                                                                            |
+| `scripts/`                                                                     | `build-app.sh`, `release.sh`, `appcast.sh`, `bump-version.sh`, `acknowledgements.swift`, `make-icon.swift`, `window-screenshot.swift`, `demo-vault.sh`, `og-image.html` |
+| `web/`, `.github/workflows/pages.yml`                                          | Website (https://itsjavi.com/notemd/) and its GitHub Pages deployment                                                                                                   |
+| `.github/workflows/ci.yml`, `release.yml`, `docs/releasing.md`                 | Tests on pushes and PRs; tag-driven, notarized GitHub Releases with Sparkle's feed (decision-10)                                                                        |
+| `brand/`                                                                       | Screenshot/social-card recipes (`brand/README.md`) and the generated intro video (`intro-video/`)                                                                       |
+| `skills/create-reusable-prompt/`                                               | Agent skill for writing template notes, and the front matter JSON Schema (keep in sync with Core)                                                                       |
 
 ### Public docs, website and intro video
 

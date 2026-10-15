@@ -18,6 +18,7 @@ final class AppDelegate: NSObject, NSApplicationDelegate {
     func applicationDidFinishLaunching(_ notification: Notification) {
         launchFinished = true
         AppLock.shared.start()
+        AppUpdater.start()
         NSApp.servicesProvider = self
         NSUpdateDynamicServices()
         // The open-documents event of a launch arrives before this point, URL events after it.
