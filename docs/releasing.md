@@ -1,30 +1,11 @@
 # Releasing NoteMD
 
-For maintainers. Releases and the update feed live on GitHub Releases (decision-10). There are two routes: from
-this Mac with the credentials already in its Keychain (no GitHub secrets, how QuickEdit ships), or from the Release
-workflow once the `release` environment has the secrets below.
-
-## From this Mac (no secrets)
+For maintainers. Releases and the update feed live on GitHub Releases (decision-10), published by the Release
+workflow, like QuickEdit's.
 
 ```bash
-make bump V=minor                 # bump VERSION, add its CHANGELOG.md section, commit and tag; nothing is pushed
-make build-notarized              # Developer ID + the `lamina` notarytool profile from the Keychain
-make appcast                      # signs the feed with the Sparkle key in the Keychain (account notemd)
-git push --atomic origin main vX.Y.Z
-gh release create vX.Y.Z build/release/NoteMD-X.Y.Z.dmg build/release/NoteMD-X.Y.Z.zip \
-  build/release/SHA256SUMS build/appcast/appcast.xml --title vX.Y.Z --verify-tag \
-  --notes-file <(scripts/changelog.sh notes X.Y.Z)
-```
-
-The pushed tag still starts the Release workflow, but it leaves an existing release alone. Create the release right
-after pushing: the workflow tests and builds for several minutes before it would publish its own.
-
-## From the Release workflow
-
-```bash
-make bump V=0.1.0 PUSH=1          # first release: tags the current VERSION (no bump), pushes main and v0.1.0
-make bump V=patch PUSH=1          # bump VERSION, tag vX.Y.Z on main, push → the Release workflow publishes it
-make bump V=0.2.0-beta.1 PUSH=1   # a GitHub pre-release: no update feed, installed copies never get it
+make bump V=patch PUSH=1          # bump VERSION, add its CHANGELOG.md section, tag vX.Y.Z on main, push → published
+make bump V=0.3.0-beta.1 PUSH=1   # a GitHub pre-release: no update feed, installed copies never get it
 ```
 
 Pushing a `vX.Y.Z` tag runs `.github/workflows/release.yml`: it tests, builds for Apple silicon, signs with Developer
@@ -34,7 +15,7 @@ ID, notarizes and staples the app and the DMG, and publishes a GitHub Release na
 
 A `vX.Y.Z-<pre-release>` tag publishes a GitHub pre-release with the same files except `appcast.xml`. GitHub never
 marks a pre-release as the latest release, so the feed, the website and the README's download link skip it. After a
-pre-release, name the next version (`make bump V=0.2.0` or `V=0.2.0-beta.2`): `major`, `minor` and `patch` need an
+pre-release, name the next version (`make bump V=0.3.0` or `V=0.3.0-beta.2`): `major`, `minor` and `patch` need an
 X.Y.Z `VERSION`.
 
 `./VERSION` is the app's version (`CFBundleShortVersionString`); the build number (`CFBundleVersion`) is the commit
@@ -80,10 +61,10 @@ for the newest release and point straight at its DMG, with its version, so a rel
 
 ## Credentials
 
-The workflow's secrets live in the `release` environment (Settings ▸ Environments), which only `v*` tags should be
-allowed to use. Every one is optional: without them the build is ad-hoc signed (other Macs need System Settings ▸
-Privacy & Security ▸ Open Anyway on first launch) and has no feed, and the release notes say so. They can hold the same
-values as Lamina's.
+The workflow's secrets live in the `release` environment (Settings ▸ Environments), which only `v*` tags can use. Every
+one is optional: without them the build is ad-hoc signed (other Macs need System Settings ▸ Privacy & Security ▸ Open
+Anyway on first launch) and has no feed, and the release notes say so. The Apple ones hold the same values as
+QuickEdit's; `SPARKLE_PRIVATE_KEY` is NoteMD's own key.
 
 | Secret                      | What it is                                                                     |
 | --------------------------- | ------------------------------------------------------------------------------ |
@@ -109,3 +90,22 @@ Otherwise it builds ad-hoc and lists what's missing. Check a build with `spctl -
 `make build-notarized` does the same with the Keychain's Developer ID identity and the `lamina` profile (override
 them with `DEVELOPER_ID` and `NOTARY_PROFILE`); without an identity it stops instead of building ad-hoc.
 `make install-notarized` then installs that app to `/Applications` like `make install`.
+
+### Publishing from this Mac (fallback)
+
+When the workflow can't publish (no secrets, or a broken runner), the same scripts publish from this Mac with the
+Keychain's identity, notary profile and Sparkle key:
+
+```bash
+make bump V=patch                 # commit and tag locally; nothing is pushed
+make build-notarized
+make appcast                      # signs the feed with the Sparkle key in the Keychain (account notemd)
+git push --atomic origin main vX.Y.Z
+gh release create vX.Y.Z build/release/NoteMD-X.Y.Z.dmg build/release/NoteMD-X.Y.Z.zip \
+  build/release/SHA256SUMS build/appcast/appcast.xml --title vX.Y.Z --verify-tag \
+  --notes-file <(scripts/changelog.sh notes X.Y.Z)
+```
+
+The pushed tag still starts the workflow, which leaves an existing release alone; create the release right after
+pushing. `make appcast` reuses `build/appcast/appcast.xml` when it exists: delete `build/appcast` first when the
+previous release came from the workflow, so the feed starts from the published one.
