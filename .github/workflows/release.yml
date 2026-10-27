@@ -112,10 +112,19 @@ jobs:
           files=("build/release/NoteMD-$VERSION.dmg" "build/release/NoteMD-$VERSION.zip" build/release/SHA256SUMS)
           if [ -f build/appcast/appcast.xml ]; then files+=(build/appcast/appcast.xml); fi
           notes="$RUNNER_TEMP/notes.md"
-          if [ -n "${NOTARY_PROFILE:-}" ]; then
-            echo "Signed with Developer ID, notarized and stapled." > "$notes"
+          # The notes are the version's CHANGELOG.md section (make bump writes it); without one, GitHub's
+          # generated notes (a compare link when there are no pull requests).
+          flags=(--title "$TAG" --notes-file "$notes" --verify-tag)
+          if scripts/changelog.sh notes "$VERSION" > "$notes"; then
+            echo >> "$notes"
           else
-            echo "⚠ **Not notarized**: ad-hoc signed. On another Mac, the first launch needs System Settings ▸ Privacy & Security ▸ Open Anyway." > "$notes"
+            : > "$notes"
+            flags+=(--generate-notes)
+          fi
+          if [ -n "${NOTARY_PROFILE:-}" ]; then
+            echo "Signed with Developer ID, notarized and stapled." >> "$notes"
+          else
+            echo "⚠ **Not notarized**: ad-hoc signed. On another Mac, the first launch needs System Settings ▸ Privacy & Security ▸ Open Anyway." >> "$notes"
           fi
           if [ "$PRERELEASE" = true ]; then
             echo "Pre-release: installed copies don't update to it." >> "$notes"
@@ -128,7 +137,6 @@ jobs:
             # break the feed's signatures, and a build without secrets would replace notarized files with ad-hoc ones.
             echo "::notice::$TAG is already released; leaving its files as they are"
           else
-            flags=(--title "$TAG" --notes-file "$notes" --generate-notes --verify-tag)
             if [ "$PRERELEASE" = true ]; then flags+=(--prerelease); fi
             gh release create "$TAG" "${files[@]}" "${flags[@]}"
           fi

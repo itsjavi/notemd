@@ -4,11 +4,25 @@ name: Tests
 on:
   pull_request:
     paths:
-      ["Sources/**", "Tests/**", "Package.swift", "Package.resolved", ".github/workflows/ci.yml"]
+      [
+        "Sources/**",
+        "Tests/**",
+        "Package.swift",
+        "Package.resolved",
+        "Resources/**",
+        ".github/workflows/ci.yml",
+      ]
   push:
     branches: [main]
     paths:
-      ["Sources/**", "Tests/**", "Package.swift", "Package.resolved", ".github/workflows/ci.yml"]
+      [
+        "Sources/**",
+        "Tests/**",
+        "Package.swift",
+        "Package.resolved",
+        "Resources/**",
+        ".github/workflows/ci.yml",
+      ]
   workflow_dispatch:
 
 permissions:

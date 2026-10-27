@@ -1,18 +1,23 @@
 #!/usr/bin/env bash
-# Bumps VERSION, commits it and tags the commit vX.Y.Z (the tag release.yml builds).
+# Bumps VERSION, adds the release's CHANGELOG.md section (scripts/changelog.sh), commits both and tags the
+# commit vX.Y.Z (the tag release.yml builds). To reword the notes, run it without --push, edit CHANGELOG.md,
+# `git commit --amend`, `git tag -fa vX.Y.Z` and push.
 #
 #   scripts/bump-version.sh <major|minor|patch|X.Y.Z|X.Y.Z-beta.N> [--push]
 #
 #   --push   pushes main and the tag together, which starts the Release workflow (it builds,
 #            signs and publishes; nothing is built locally)
 #   X.Y.Z-beta.N publishes a GitHub pre-release; after one, name the next version (not major|minor|patch)
+#   X.Y.Z equal to VERSION tags the current commit without a bump (a first release, or a version nothing tagged yet)
 #
-# X.Y.Z equal to VERSION tags the current commit without a bump (a first release, or a version nothing tagged yet).
 # Needs a clean working tree on main, so the tagged commit is exactly what gets released.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
-usage() { sed -n '4,8s/^# \{0,1\}//p' "$0" >&2; exit 64; }
+APP_NAME="NoteMD"
+BRANCH="main"
+
+usage() { sed -n '6,12s/^# \{0,1\}//p' "$0" >&2; exit 64; }
 fail() { echo "✗ $*" >&2; exit 1; }
 
 target="" push=0
@@ -69,31 +74,38 @@ else
 fi
 
 tag="v$next"
-[ "$(git branch --show-current)" = main ] || fail "check out main first (releases are tagged on main)"
+[ "$(git branch --show-current)" = "$BRANCH" ] || fail "check out $BRANCH first (releases are tagged on $BRANCH)"
 [ -z "$(git status --porcelain)" ] || fail "commit or stash your changes first; the tag must match what gets built"
 git rev-parse -q --verify "refs/tags/$tag" >/dev/null && fail "tag $tag already exists"
 
 if [ "$push" = 1 ]; then
-  git fetch -q origin main --tags
+  git fetch -q origin "$BRANCH" --tags
   git ls-remote --exit-code --tags origin "refs/tags/$tag" >/dev/null && fail "tag $tag already exists on origin"
-  [ -z "$(git rev-list HEAD..origin/main)" ] || fail "main is behind origin/main; pull first"
+  [ -z "$(git rev-list "HEAD..origin/$BRANCH")" ] || fail "$BRANCH is behind origin/$BRANCH; pull first"
 fi
 
 if [ "$retag" = 1 ]; then
-  git tag -a "$tag" -m "NoteMD $next"
+  # Its notes too, unless CHANGELOG.md has them already.
+  if ! grep -q "^## $next (" CHANGELOG.md 2>/dev/null; then
+    scripts/changelog.sh add "$next" >/dev/null
+    git add CHANGELOG.md
+    git commit -q -m "chore(release): $tag"
+  fi
+  git tag -a "$tag" -m "$APP_NAME $next"
   echo "✓ Tagged $tag on the current commit (VERSION is already $next)"
 else
   echo "$next" > VERSION
-  git add VERSION
+  scripts/changelog.sh add "$next" >/dev/null
+  git add VERSION CHANGELOG.md
   git commit -q -m "chore(release): $tag"
-  git tag -a "$tag" -m "NoteMD $next"
+  git tag -a "$tag" -m "$APP_NAME $next"
   echo "✓ $current → $next, committed and tagged $tag"
 fi
 
 if [ "$push" = 1 ]; then
-  # Both or neither: a pushed tag without its commit on main (or the reverse) confuses releases.
-  git push -q --atomic origin HEAD:main "refs/tags/$tag"
-  echo "✓ Pushed main and $tag: the Release workflow is building it"
+  # Both or neither: a pushed tag without its commit on the branch (or the reverse) confuses releases.
+  git push -q --atomic origin "HEAD:$BRANCH" "refs/tags/$tag"
+  echo "✓ Pushed $BRANCH and $tag: the Release workflow is building it"
 else
-  echo "  Push when ready: git push --atomic origin main $tag"
+  echo "  Push when ready: git push --atomic origin $BRANCH $tag"
 fi

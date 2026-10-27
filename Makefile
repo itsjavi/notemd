@@ -36,7 +36,8 @@ release:
 appcast:
 	scripts/appcast.sh
 
-# Bumps VERSION, commits and tags it: make bump V=patch|minor|major|X.Y.Z [PUSH=1] (docs/releasing.md)
+# Bumps VERSION, adds its CHANGELOG.md section, commits and tags it: make bump V=patch|minor|major|X.Y.Z [PUSH=1]
+# (docs/releasing.md)
 bump:
 	scripts/bump-version.sh $(V) $(if $(PUSH),--push)
 

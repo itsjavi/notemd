@@ -7,17 +7,20 @@
 # Pre-releases stay out of the feed.
 #
 # The private EdDSA key stays out of the repo: by default Sparkle's tools read it from the login
-# Keychain (account "notemd", made by `generate_keys --account notemd`). CI passes
-# SPARKLE_KEY_FILE instead, a file holding the exported key (`generate_keys --account notemd -x <file>`).
-# Release notes: put NoteMD-<version>.html or .md next to the zip in build/appcast and they're
-# embedded in the feed.
+# Keychain (account "notemd", made by `generate_keys --account notemd`). CI passes SPARKLE_KEY_FILE
+# instead, a file holding the exported key (`generate_keys --account notemd -x <file>`).
+# Release notes: the version's CHANGELOG.md section (scripts/changelog.sh), written next to the zip as
+# NoteMD-<version>.md and embedded in the feed, so Sparkle's update window shows it. A
+# NoteMD-<version>.html or .md already in build/appcast is used instead.
 set -euo pipefail
 cd "$(dirname "$0")/.."
 
+APP_NAME="NoteMD"
+SPARKLE_ACCOUNT="notemd"
 FEED_URL="$(/usr/libexec/PlistBuddy -c "Print :SUFeedURL" Resources/Info.plist)"
 TOOLS=".build/artifacts/sparkle/Sparkle/bin"
 OUT="build/appcast"
-APP="build/release/NoteMD.app"
+APP="build/release/$APP_NAME.app"
 
 if [ ! -x "$TOOLS/generate_appcast" ]; then
   swift package resolve --disable-keychain
@@ -35,14 +38,14 @@ if [[ "$VERSION" == *-* ]]; then
   echo "error: $VERSION is a pre-release; installed copies only update to releases" >&2
   exit 1
 fi
-ZIP="build/release/NoteMD-$VERSION.zip"
+ZIP="build/release/$APP_NAME-$VERSION.zip"
 # https://github.com/<owner>/<repo>/releases/latest/download/appcast.xml → …/releases/download/v<version>/
 PREFIX="${DOWNLOAD_URL_PREFIX:-${FEED_URL%%/releases/*}/releases/download/v$VERSION/}"
 
 mkdir -p "$OUT"
 # Keep earlier releases in the feed: start from the published one unless there's a local copy.
 if [ ! -f "$OUT/appcast.xml" ] && [ -z "${NEW_FEED:-}" ]; then
-  # releases/latest/download/ redirects to the newest release's asset.
+  # releases/latest/download/ redirects to the newest release's asset: -L follows it.
   code="$(curl -sSL -o "$OUT/appcast.xml" -w '%{http_code}' "$FEED_URL" || true)"
   case "$code" in
     200) echo "Starting from the published feed" ;;
@@ -53,8 +56,15 @@ if [ ! -f "$OUT/appcast.xml" ] && [ -z "${NEW_FEED:-}" ]; then
   esac
 fi
 cp "$ZIP" "$OUT/"
+NOTES="$OUT/$APP_NAME-$VERSION"
+if [ ! -f "$NOTES.html" ] && [ ! -f "$NOTES.md" ]; then
+  scripts/changelog.sh notes "$VERSION" > "$NOTES.md" || {
+    rm -f "$NOTES.md"
+    echo "warning: no CHANGELOG.md section for $VERSION: the update has no release notes" >&2
+  }
+fi
 
-KEY_FLAGS=(--account notemd)
+KEY_FLAGS=(--account "$SPARKLE_ACCOUNT")
 if [ -n "${SPARKLE_KEY_FILE:-}" ]; then KEY_FLAGS=(--ed-key-file "$SPARKLE_KEY_FILE"); fi
 "$TOOLS/generate_appcast" "${KEY_FLAGS[@]}" --download-url-prefix "$PREFIX" \
   --embed-release-notes --maximum-deltas 0 --maximum-versions 0 "$OUT"
@@ -66,4 +76,4 @@ if ! grep -F "/$(basename "$ZIP")\"" "$OUT/appcast.xml" | grep -q 'sparkle:edSig
   exit 1
 fi
 
-echo "✓ $OUT/appcast.xml lists NoteMD $VERSION, linked to $PREFIX$(basename "$ZIP"); the v$VERSION release needs both"
+echo "✓ $OUT/appcast.xml lists $APP_NAME $VERSION, linked to $PREFIX$(basename "$ZIP"); the v$VERSION release needs both"
