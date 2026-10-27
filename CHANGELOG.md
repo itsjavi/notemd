@@ -2,6 +2,18 @@
 
 Notable changes in each NoteMD release, written from its commit messages by `scripts/changelog.sh`.
 
+## 0.2.0 (2026-10-27)
+
+### Features
+
+- **preview:** click task checkboxes to tick them off in the note (d266a3a)
+- **icon:** teal cards with a light mark and lines in dark mode (486c8cc)
+- **icon:** larger artwork and a black dark-mode field (dddfd8b)
+
+### Fixes
+
+- **editor:** build with Xcode 26.6's concurrency checks (ac34de6)
+
 ## 0.1.0 (2026-10-15)
 
 ### Features
