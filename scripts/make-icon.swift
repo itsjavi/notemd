@@ -50,8 +50,9 @@ func rotate(_ degrees: CGFloat, around center: NSPoint) {
 
 // MARK: - Layout constants (redraws should change numbers here, not code)
 
-// Artwork stays inside the middle ~60% of the canvas so the system mask, glass and shadow have room.
-let artFraction: CGFloat = 0.66
+// Artwork fills the middle ~82% of the canvas, bold like the system apps' icons (and QuickEdit's), leaving the
+// mask's corners, the glass edge and the shadow a little room.
+let artFraction: CGFloat = 0.82
 let art = NSRect(x: canvas * (1 - artFraction) / 2, y: canvas * (1 - artFraction) / 2,
                  width: canvas * artFraction, height: canvas * artFraction)
 let unit = art.width
@@ -76,7 +77,7 @@ let lineHeight = cardSize.height * 0.062
 let lineGap = cardSize.height * 0.075
 let lineWidths: [CGFloat] = [1.0, 0.78, 0.9]
 
-// Palette: deep teal field (icon.json), paper white cards, amber heading mark, cool slate text.
+// Palette: deep teal field (black in dark mode, icon.json), paper white cards, amber heading mark, cool slate text.
 let paperTop = "#FFFFFF", paperBottom = "#E9F1EF"
 let backTop = "#CFEAE5", backBottom = "#A5D3CC"
 let amberTop = "#FFB547", amberBottom = "#F27F1B"

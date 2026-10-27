@@ -67,7 +67,10 @@
     <header class="site-header">
       <div class="container header-inner">
         <a class="brand" href="./" aria-label="NoteMD home">
-          <img src="assets/icon.png" width="32" height="32" alt="" />
+          <picture>
+            <source srcset="assets/icon-dark.png" media="(prefers-color-scheme: dark)" />
+            <img src="assets/icon.png" width="32" height="32" alt="" />
+          </picture>
           <span>NoteMD</span>
         </a>
         <nav aria-label="Main">
@@ -95,13 +98,16 @@
     <main id="main">
       <section class="hero">
         <div class="container hero-copy">
-          <img
-            class="hero-icon"
-            src="assets/icon.png"
-            width="112"
-            height="112"
-            alt="NoteMD app icon"
-          />
+          <picture>
+            <source srcset="assets/icon-dark.png" media="(prefers-color-scheme: dark)" />
+            <img
+              class="hero-icon"
+              src="assets/icon.png"
+              width="112"
+              height="112"
+              alt="NoteMD app icon"
+            />
+          </picture>
           <p class="pill">Free &amp; open source · Native on macOS 26</p>
           <h1>Markdown notes, <br />versioned automatically.</h1>
           <p class="lead">
@@ -442,7 +448,10 @@ make install</code></pre>
     <footer class="site-footer">
       <div class="container footer-inner">
         <p>
-          <img src="assets/icon.png" width="20" height="20" alt="" />
+          <picture>
+            <source srcset="assets/icon-dark.png" media="(prefers-color-scheme: dark)" />
+            <img src="assets/icon.png" width="20" height="20" alt="" />
+          </picture>
           <span
             >NoteMD is open source under the
             <a href="https://github.com/itsjavi/notemd/blob/main/LICENSE">MIT License</a>.</span

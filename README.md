@@ -1,5 +1,8 @@
 <p align="center">
-  <img src="web/assets/icon.png" width="128" height="128" alt="NoteMD app icon">
+  <picture>
+    <source media="(prefers-color-scheme: dark)" srcset="web/assets/icon-dark.png">
+    <img src="web/assets/icon.png" width="128" height="128" alt="NoteMD app icon">
+  </picture>
 </p>
 
 <h1 align="center">NoteMD</h1>
