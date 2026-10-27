@@ -5,7 +5,8 @@
 // Motif: a Markdown note card with a bold amber `#` heading mark and text lines, with an older
 // version of the note peeking out behind it (versioning). The background fill, glass, shadow and
 // dark appearance live in AppIcon.icon/icon.json; edit that by hand or in Icon Composer. This
-// script only rewrites Assets/, so those edits survive a redraw.
+// script only rewrites Assets/, so those edits survive a redraw. In dark mode icon.json recolors
+// the layers (teal cards, light `#` and lines on black), so each part that changes color is its own layer.
 import AppKit
 
 let output = CommandLine.arguments.dropFirst().first ?? "Resources/AppIcon.icon"
@@ -120,9 +121,7 @@ let layers: [(String, NSBitmapImageRep)] = [
         outline.windingRule = .nonZero
         gradientFill(outline, amberTop, amberBottom)
     }),
-    ("note", layer {
-        gradientFill(NSBezierPath(roundedRect: card, xRadius: cardRadius, yRadius: cardRadius),
-                     paperTop, paperBottom)
+    ("lines", layer {
         // Body text lines below the heading.
         var y = hashRect.minY - lineGap * 1.1 - lineHeight
         let maxWidth = card.width - 2 * contentInset
@@ -132,6 +131,10 @@ let layers: [(String, NSBitmapImageRep)] = [
             NSBezierPath(roundedRect: r, xRadius: lineHeight / 2, yRadius: lineHeight / 2).fill()
             y -= lineHeight + lineGap
         }
+    }),
+    ("note", layer {
+        gradientFill(NSBezierPath(roundedRect: card, xRadius: cardRadius, yRadius: cardRadius),
+                     paperTop, paperBottom)
     }),
     ("version", layer {
         let r = card.offsetBy(dx: backOffset.x, dy: backOffset.y)
