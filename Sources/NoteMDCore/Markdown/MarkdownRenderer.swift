@@ -17,11 +17,16 @@ public enum MarkdownRenderer {
         public var sourcePositions: Bool
         /// Add a Transcribe link (`notemd-action:transcribe?src=…`) under audio embeds.
         public var transcribeLinks: Bool
+        /// Leave task list checkboxes enabled (class `task-toggle`) so the preview can toggle them by their item's
+        /// source line (`TaskCheckbox`). Needs `sourcePositions`.
+        public var toggleableTasks: Bool
 
-        public init(frontMatter: FrontMatterStyle = .hidden, sourcePositions: Bool = true, transcribeLinks: Bool = false) {
+        public init(frontMatter: FrontMatterStyle = .hidden, sourcePositions: Bool = true, transcribeLinks: Bool = false,
+                    toggleableTasks: Bool = false) {
             self.frontMatter = frontMatter
             self.sourcePositions = sourcePositions
             self.transcribeLinks = transcribeLinks
+            self.toggleableTasks = toggleableTasks
         }
     }
 
@@ -72,8 +77,19 @@ public enum MarkdownRenderer {
             convertMediaEmbeds(in: document, transcribeLinks: options.transcribeLinks)
             guard let rendered = cmark_render_html(document, cmarkOptions, cmark_parser_get_syntax_extensions(parser)) else { return "" }
             defer { free(rendered) }
-            return String(cString: rendered)
+            let html = String(cString: rendered)
+            return options.toggleableTasks && options.sourcePositions ? enableTaskCheckboxes(html) : html
         } ?? ""
+    }
+
+    /// The tasklist extension's checkbox, right after its item's opening tag (raw HTML checkboxes don't match).
+    private static let taskCheckboxPattern = try! NSRegularExpression(
+        pattern: #"(<li data-sourcepos="[0-9:-]+">)<input type="checkbox"( checked="")? disabled="" />"#)
+
+    private static func enableTaskCheckboxes(_ html: String) -> String {
+        taskCheckboxPattern.stringByReplacingMatches(
+            in: html, range: NSRange(location: 0, length: (html as NSString).length),
+            withTemplate: #"$1<input type="checkbox" class="task-toggle"$2 />"#)
     }
 
     /// Parses `body` with the GFM extensions and hands the document to `body`.

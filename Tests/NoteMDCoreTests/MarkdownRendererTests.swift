@@ -1,3 +1,4 @@
+import Foundation
 import Testing
 @testable import NoteMDCore
 
@@ -85,6 +86,27 @@ import Testing
         #expect(render("![img](a.png) [song](a.mp3)") == "<p><img src=\"a.png\" alt=\"img\" /> <a href=\"a.mp3\">song</a></p>\n")
         #expect(render("\\+[song](a.mp3)") == "<p>+<a href=\"a.mp3\">song</a></p>\n")
         #expect(render("1+[song](a.mp3)").contains("<p>1<span class=\"media-embed media-audio\">"))
+    }
+
+    @Test func toggleableTasksKeepTheirSourceLine() {
+        let markdown = "---\ntitle: x\n---\n- [ ] open\n- [x] done\n\n<ul><li><input type=\"checkbox\" disabled=\"\" /> raw</li></ul>"
+        let html = render(markdown, .init(toggleableTasks: true))
+        #expect(html.contains("<li data-sourcepos=\"4:1-4:10\"><input type=\"checkbox\" class=\"task-toggle\" />"))
+        #expect(html.contains("<li data-sourcepos=\"5:1-6:0\"><input type=\"checkbox\" class=\"task-toggle\" checked=\"\" />"))
+        #expect(html.contains("<li><input type=\"checkbox\" disabled=\"\" /> raw</li>"))
+        #expect(!render(markdown, .init()).contains("task-toggle"))
+    }
+
+    @Test func taskCheckboxToggle() {
+        let text = "# T\n- [ ] open\r\n  * [x] nested\n> 1. [X] quoted\n- [ ]not a task\n- plain\n- [ ]"
+        func toggled(_ line: Int) -> String? {
+            TaskCheckbox.toggle(in: text, line: line).map { (text as NSString).replacingCharacters(in: $0.range, with: $0.replacement) }
+        }
+        #expect(toggled(2) == "# T\n- [x] open\r\n  * [x] nested\n> 1. [X] quoted\n- [ ]not a task\n- plain\n- [ ]")
+        #expect(toggled(3) == "# T\n- [ ] open\r\n  * [ ] nested\n> 1. [X] quoted\n- [ ]not a task\n- plain\n- [ ]")
+        #expect(toggled(4) == "# T\n- [ ] open\r\n  * [x] nested\n> 1. [ ] quoted\n- [ ]not a task\n- plain\n- [ ]")
+        #expect(toggled(7)?.hasSuffix("- [x]") == true)
+        for line in [0, 1, 5, 6, 8] { #expect(toggled(line) == nil) }
     }
 
     @Test func linkDestinations() {

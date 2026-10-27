@@ -99,7 +99,13 @@ struct NoteEditorPane: View {
                 let path = store.relativePath(of: url)
                 if store.note(at: path) != nil { store.selectedNoteID = path }
             },
-            onTranscribe: { source in store.sheet = .transcribe(path: editor.path, source: source) }
+            onTranscribe: { source in store.sheet = .transcribe(path: editor.path, source: source) },
+            onToggleTask: { line in
+                // Preview lines count the front matter, like fullText and store.replace's range.
+                guard let toggle = TaskCheckbox.toggle(in: editor.fullText, line: line) else { return false }
+                store.replace(toggle.range, with: toggle.replacement, inNoteAt: editor.path)
+                return true
+            }
         )
     }
 }

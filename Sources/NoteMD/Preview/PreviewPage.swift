@@ -45,6 +45,7 @@ enum PreviewPage {
     ul ul, ul ol, ol ol, ol ul { margin: 0; }
     li:has(> input[type=checkbox]) { list-style: none; }
     li > input[type=checkbox] { margin: 0 .3em .25em -1.5em; vertical-align: middle; accent-color: var(--link); }
+    li > input.task-toggle { cursor: pointer; }
     blockquote { padding: 0 1em; color: var(--muted); border-left: .25em solid var(--border); }
     hr { height: .25em; margin: 24px 0; padding: 0; background: var(--border); border: 0; }
     code, pre, kbd, samp { font-family: ui-monospace, "SF Mono", Menlo, monospace; font-size: 85%; }

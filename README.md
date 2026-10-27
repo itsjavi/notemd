@@ -70,8 +70,9 @@ result. Voice notes and video reviews came next, because some thoughts are faste
 - **Organize and find.** Folders with a color and an icon, tags in front matter (`tags:`), and search across titles,
   tags and text with `tag:name` / `#name` filters.
 - **GitHub Flavored Markdown.** Tables, task lists, footnotes, alerts and autolinks, rendered by cmark-gfm, with Editor,
-  Split and Preview modes (⌘1, ⌘2, ⌘3). Find and replace in any note (⌘F, ⌥⌘F), and line numbers and invisible
-  characters (spaces, tabs, line breaks) are one click away in the View menu.
+  Split and Preview modes (⌘1, ⌘2, ⌘3). Click a task's checkbox in the preview to tick it off in the note. Find and
+  replace in any note (⌘F, ⌥⌘F), and line numbers and invisible characters (spaces, tabs, line breaks) are one click away
+  in the View menu.
 - **Bring Markdown files in.** Open a `.md` file from Finder, drop it on the Dock icon or send it from the Share menu,
   and NoteMD copies or moves it into the vault you pick. A file that's already in one of your vaults opens there. NoteMD
   appears under _Open With_ for Markdown files only, without becoming the default app.

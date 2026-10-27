@@ -296,6 +296,8 @@ for incognito notes. `debug/state` reports the `layout:` (`files` or `root`) and
   (paperclip popover), `ui/asset-unlink?note=&asset=`, `ui/asset-rename?path=&name=`, `ui/asset-delete?path=` and
   `ui/assets-cleanup` (as confirmed; `confirm=1` only shows the dialog), `ui/sheet?name=rename-asset&path=`
 - `ui/editor-command?name=tab|backtab|newline|text&text=&select=end|all`, `ui/settings`
+- `ui/preview-click-task?line=` clicks the checkbox of the task item on that source line (front matter counted) in the
+  window's preview, through the same listener a real click reaches
 - `ui/find?action=show|show-replace|next|previous|replace|replace-all|replace-all-in-selection|hide&q=&with=`
   (fills the find bar's fields; puts the shared find pasteboard back), `ui/editor-command?name=undo`
 - `ui/editor-option?name=line-numbers|invisibles&value=0|1`; `debug/editor-bench?out=` times typing

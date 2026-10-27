@@ -21,12 +21,20 @@ struct MarkdownPreview: NSViewRepresentable {
     var onOpenNote: ((URL) -> Void)?
     /// Shows Transcribe links under audio embeds; receives the clip's link destination as written.
     var onTranscribe: ((String) -> Void)?
+    /// Makes task list checkboxes clickable; receives the 1-based source line of the clicked item and returns
+    /// whether the note changed (if not, the page is re-rendered so the checkbox shows the source again).
+    var onToggleTask: ((Int) -> Bool)?
 
     func makeCoordinator() -> Coordinator { Coordinator() }
 
     func makeNSView(context: Context) -> WKWebView {
         let configuration = WKWebViewConfiguration()
         configuration.setURLSchemeHandler(context.coordinator.fileHandler, forURLScheme: LocalFileSchemeHandler.scheme)
+        // Note content can't run scripts, so the app listens from its own content world, the only one that can post.
+        let controller = configuration.userContentController
+        controller.add(WeakScriptMessageHandler(context.coordinator), contentWorld: .defaultClient, name: Coordinator.taskToggleMessage)
+        controller.addUserScript(WKUserScript(source: Coordinator.taskToggleScript, injectionTime: .atDocumentEnd,
+                                              forMainFrameOnly: true, in: .defaultClient))
         configuration.preferences.isElementFullscreenEnabled = false
         configuration.websiteDataStore = .nonPersistent()
         let webView = WKWebView(frame: .zero, configuration: configuration)
@@ -46,9 +54,21 @@ struct MarkdownPreview: NSViewRepresentable {
     static func dismantleNSView(_ webView: WKWebView, coordinator: Coordinator) {
         coordinator.renderTask?.cancel()
         webView.stopLoading()
+        webView.configuration.userContentController.removeAllScriptMessageHandlers()
     }
 
-    @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate {
+    @MainActor final class Coordinator: NSObject, WKNavigationDelegate, WKUIDelegate, WKScriptMessageHandler {
+        static let taskToggleMessage = "taskToggle"
+        /// Posts the source line of a task item whose checkbox changed (`MarkdownRenderer.Options.toggleableTasks`).
+        static let taskToggleScript = """
+        document.addEventListener('change', (event) => {
+          const box = event.target;
+          if (!box.matches || !box.matches('input.task-toggle')) return;
+          const item = box.closest('li[data-sourcepos]');
+          if (item) window.webkit.messageHandlers.\(taskToggleMessage).postMessage(parseInt(item.getAttribute('data-sourcepos')));
+        });
+        """
+
         weak var webView: WKWebView?
         let fileHandler = LocalFileSchemeHandler()
         var renderTask: Task<Void, Never>?
@@ -73,7 +93,9 @@ struct MarkdownPreview: NSViewRepresentable {
             }
             if preview.markdown != lastMarkdown {
                 lastMarkdown = preview.markdown
-                let options = MarkdownRenderer.Options(frontMatter: preview.frontMatter, transcribeLinks: preview.onTranscribe != nil)
+                let options = MarkdownRenderer.Options(
+                    frontMatter: preview.frontMatter, transcribeLinks: preview.onTranscribe != nil,
+                    toggleableTasks: preview.onToggleTask != nil)
                 scheduleRender(preview.markdown, options: options, immediate: !isPageReady && !isLoading)
             }
             if let line = preview.scrollLine, line != lastScrollLine {
@@ -179,6 +201,17 @@ struct MarkdownPreview: NSViewRepresentable {
             }
         }
 
+        // MARK: WKScriptMessageHandler
+
+        func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+            guard message.name == Self.taskToggleMessage, let line = message.body as? Int, let parent else { return }
+            if parent.onToggleTask?(line) != true {
+                // The checkbox already flipped on the page: render the unchanged source again.
+                lastMarkdown = nil
+                update(parent)
+            }
+        }
+
         // MARK: WKUIDelegate
 
         func webView(_ webView: WKWebView, createWebViewWith configuration: WKWebViewConfiguration, for navigationAction: WKNavigationAction, windowFeatures: WKWindowFeatures) -> WKWebView? {
@@ -189,6 +222,17 @@ struct MarkdownPreview: NSViewRepresentable {
         func webView(_ webView: WKWebView, decideMediaCapturePermissionsFor origin: WKSecurityOrigin, initiatedBy frame: WKFrameInfo, type: WKMediaCaptureType) async -> WKPermissionDecision {
             .deny
         }
+    }
+}
+
+/// Forwards script messages, so the user content controller doesn't keep the coordinator (and its web view) alive.
+@MainActor private final class WeakScriptMessageHandler: NSObject, WKScriptMessageHandler {
+    weak var target: (any WKScriptMessageHandler)?
+
+    init(_ target: any WKScriptMessageHandler) { self.target = target }
+
+    func userContentController(_ userContentController: WKUserContentController, didReceive message: WKScriptMessage) {
+        target?.userContentController(userContentController, didReceive: message)
     }
 }
 

@@ -1,6 +1,7 @@
 import AVFoundation
 import AppKit
 import NoteMDCore
+import WebKit
 
 /// Handles the app's URL scheme. Every build accepts `share` (the Share menu extension's wake-up: what was shared
 /// waits on a private pasteboard); DEBUG builds also expose test hooks that call the same model methods as the UI,
@@ -289,6 +290,14 @@ enum DebugHooks {
             let source = query["from"].flatMap { safePath($0) }.map { URL(fileURLWithPath: $0) }
             store?.voiceRecorder.simulatedClip = { url in makeClip(at: url, from: source, query: query) }
             store?.startVoiceNote()
+        case "ui/preview-click-task":
+            // Clicks the checkbox of the task item on source `line` in the window's preview, from the app's content
+            // world like a real click reaches its listener.
+            guard let line = Int(query["line"] ?? ""),
+                  let webView = store.flatMap({ s in windows.controllers.first { $0.store === s }?.window })?.contentView.flatMap(findWebView)
+            else { return }
+            let script = "for (const li of document.querySelectorAll('li[data-sourcepos]')) { if (parseInt(li.getAttribute('data-sourcepos')) === line) { li.querySelector(':scope > input')?.click(); break; } }"
+            webView.callAsyncJavaScript(script, arguments: ["line": line], in: nil, in: .defaultClient)
         case "ui/find":
             // Edit > Find on the repository window. `q` and `with` fill the find bar's fields; the shared find
             // pasteboard NSTextFinder writes is put back afterwards.
@@ -413,6 +422,14 @@ enum DebugHooks {
         } catch {
             return false
         }
+    }
+
+    private static func findWebView(in view: NSView) -> WKWebView? {
+        if let webView = view as? WKWebView { return webView }
+        for subview in view.subviews {
+            if let found = findWebView(in: subview) { return found }
+        }
+        return nil
     }
 
     private static func findTextView(in view: NSView) -> MarkdownTextView? {
