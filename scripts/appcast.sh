@@ -55,6 +55,9 @@ if [ ! -f "$OUT/appcast.xml" ] && [ -z "${NEW_FEED:-}" ]; then
        exit 1 ;;
   esac
 fi
+# Only this version's archive: generate_appcast would point any archive left from an earlier run at this release's
+# download URL. Items without an archive here keep their own URLs.
+find "$OUT" -maxdepth 1 -name "$APP_NAME-*.zip" ! -name "$(basename "$ZIP")" -delete
 cp "$ZIP" "$OUT/"
 NOTES="$OUT/$APP_NAME-$VERSION"
 if [ ! -f "$NOTES.html" ] && [ ! -f "$NOTES.md" ]; then
